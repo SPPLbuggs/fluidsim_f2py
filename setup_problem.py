@@ -94,8 +94,12 @@ def setup_problem(nz,nr,rank,size):
             temp = 1
             j_loc = 1
     
-    z   = z[max(0,nz/size*rank-1):min(nz,nz/size*(rank+1))+1]
-    phi = phi[:,max(0,nz/size*rank-1):min(nz,nz/size*(rank+1))+1]
+    Jstart = max(0,nz/size*rank-1)
+    Jend   = min(nz,nz/size*(rank+1))+1
+    z   = z[Jstart:Jend]
+    phi = phi[:,Jstart:Jend]
+    type_z = type_z[:,Jstart:Jend]
+    type_r = type_r[:,Jstart:Jend]
     
     ne = np.ones([nr,len(z)])*init/n_0
     ni = ne
@@ -105,6 +109,8 @@ def setup_problem(nz,nr,rank,size):
     main.mod.nz        = nz
     main.mod.nr        = nr
     main.mod.nz_loc    = len(z)
+    main.mod.phir      = v_r
+    main.mod.phil      = v_l
     main.mod.type_z    = type_z
     main.mod.type_r    = type_r
     main.mod.glob_idx  = global_idx
@@ -113,8 +119,6 @@ def setup_problem(nz,nr,rank,size):
     main.mod.z         = z
     main.mod.r         = r
     main.mod.phi       = phi
-    main.mod.phiR      = v_r
-    main.mod.phiL      = v_l
     main.mod.ne_pl     = ne
     main.mod.ni_pl     = ni
     main.mod.nt_pl     = nt

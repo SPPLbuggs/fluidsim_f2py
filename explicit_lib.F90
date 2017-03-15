@@ -11,73 +11,101 @@
     integer, intent(inout) :: stage
     real(dp), intent(in) :: time, fintime
     real(dp), intent(inout) :: err_prev
-    real(dp) :: error_ni(nr, nz_loc), error_ne(nr, nz_loc), &
-                error_nt(nr, nz_loc), normerr_ni, normerr_ne, &
-                normerr_nt, err_curr, scaling_factor, &
-                abs_tol = 1e-4, rel_tol = 1e-4
+    real(dp) :: err_ni(nr, nz_loc), err_ne(nr, nz_loc), &
+                err_nt(nr, nz_loc), normerr_ni, normerr_ne, &
+                normerr_nt, normerr_ni_recv, normerr_ne_recv, normerr_nt_recv, &
+                err_curr, scaling_factor, abs_tol = 1e-4, rel_tol = 1e-4
+    integer :: j
     
     ! merson 4("5") adaptive time-stepping
     if (stage == 1) then
-        ni_mi = ni_org + ki(1,:,:)*deltime/3.0_dp
-        ne_mi = ne_org + ke(1,:,:)*deltime/3.0_dp
-        nt_mi = nt_org + kt(1,:,:)*deltime/3.0_dp
+        do j = Jstart, Jend
+            ni_mi(:,j) = ni_org(:,j) + ki(1,:,j)*deltime/3.0_dp
+            ne_mi(:,j) = ne_org(:,j) + ke(1,:,j)*deltime/3.0_dp
+            nt_mi(:,j) = nt_org(:,j) + kt(1,:,j)*deltime/3.0_dp
+        end do
         
     else if (stage == 2) then
-        
-        ni_mi = ni_org + deltime * ( &
-                     ki(1,:,:) / 6.0_dp + ki(2,:,:)/6.0_dp )
-        ne_mi = ne_org + deltime * ( &
-                     ke(1,:,:) / 6.0_dp + ke(2,:,:)/6.0_dp )
-        nt_mi = nt_org + deltime * ( &
-                     kt(1,:,:) / 6.0_dp + kt(2,:,:)/6.0_dp )
+        do j = Jstart, Jend
+            ni_mi(:,j) = ni_org(:,j) + deltime * ( &
+                         ki(1,:,j) / 6.0_dp + ki(2,:,j)/6.0_dp )
+            ne_mi(:,j) = ne_org(:,j) + deltime * ( &
+                         ke(1,:,j) / 6.0_dp + ke(2,:,j)/6.0_dp )
+            nt_mi(:,j) = nt_org(:,j) + deltime * ( &
+                         kt(1,:,j) / 6.0_dp + kt(2,:,j)/6.0_dp )
+        end do
         
     else if (stage == 3) then
-        ni_mi = ni_org + deltime * ( &
-                     ki(1,:,:) / 8.0_dp + ki(3,:,:) * 3.0_dp/8.0_dp )
-        ne_mi = ne_org + deltime * ( &
-                     ke(1,:,:) / 8.0_dp + ke(3,:,:) * 3.0_dp/8.0_dp )
-        nt_mi = nt_org + deltime * ( &
-                     kt(1,:,:) / 8.0_dp + kt(3,:,:) * 3.0_dp/8.0_dp )
-            
+        do j = Jstart, Jend
+            ni_mi(:,j)= ni_org(:,j)+ deltime * ( ki(1,:,j) / 8.0_dp &
+                        + ki(3,:,j) * 3.0_dp/8.0_dp )
+            ne_mi(:,j)= ne_org(:,j)+ deltime * ( ke(1,:,j) / 8.0_dp &
+                        + ke(3,:,j) * 3.0_dp/8.0_dp )
+            nt_mi(:,j)= nt_org(:,j)+ deltime * ( kt(1,:,j) / 8.0_dp &
+                        + kt(3,:,j) * 3.0_dp/8.0_dp )
+        end do
+        
     else if (stage == 4) then
-        ni_mi = ni_org + deltime * ( ki(1,:,:) / 2.0_dp &
-                     - ki(3,:,:) * 3.0_dp / 2.0_dp + ki(4,:,:) * 2.0_dp )
-        ne_mi = ne_org + deltime * ( ke(1,:,:) / 2.0_dp &
-                     - ke(3,:,:) * 3.0_dp / 2.0_dp + ke(4,:,:) * 2.0_dp )
-        nt_mi = nt_org + deltime * ( kt(1,:,:) / 2.0_dp &
-                     - kt(3,:,:) * 3.0_dp / 2.0_dp + kt(4,:,:) * 2.0_dp )
+        do j = Jstart, Jend
+            ni_mi(:,j)= ni_org(:,j)+ deltime * ( ki(1,:,j) / 2.0_dp &
+                        - ki(3,:,j) * 3.0_dp / 2.0_dp + ki(4,:,j) * 2.0_dp )
+            ne_mi(:,j)= ne_org(:,j)+ deltime * ( ke(1,:,j) / 2.0_dp &
+                        - ke(3,:,j) * 3.0_dp / 2.0_dp + ke(4,:,j) * 2.0_dp )
+            nt_mi(:,j)= nt_org(:,j)+ deltime * ( kt(1,:,j) / 2.0_dp &
+                        - kt(3,:,j) * 3.0_dp / 2.0_dp + kt(4,:,j) * 2.0_dp )
+        end do
     else
-        ni_pl = ni_org + deltime * ( ki(1,:,:) / 6.0_dp &
-                    + ki(4,:,:) * 2.0_dp / 3.0_dp + ki(5,:,:) / 6.0_dp )
-        ne_pl = ne_org + deltime * ( ke(1,:,:) / 6.0_dp &
-                    + ke(4,:,:) * 2.0_dp / 3.0_dp + ke(5,:,:) / 6.0_dp )
-        nt_pl = nt_org + deltime * ( kt(1,:,:) / 6.0_dp &
-                    + kt(4,:,:) * 2.0_dp / 3.0_dp + kt(5,:,:) / 6.0_dp )
+        do j = Jstart, Jend
+            ni_pl(:,j)= ni_org(:,j)+ deltime * ( ki(1,:,j) / 6.0_dp &
+                        + ki(4,:,j) * 2.0_dp / 3.0_dp + ki(5,:,j) / 6.0_dp )
+            ne_pl(:,j)= ne_org(:,j)+ deltime * ( ke(1,:,j) / 6.0_dp &
+                        + ke(4,:,j) * 2.0_dp / 3.0_dp + ke(5,:,j) / 6.0_dp )
+            nt_pl(:,j)= nt_org(:,j)+ deltime * ( kt(1,:,j) / 6.0_dp &
+                        + kt(4,:,j) * 2.0_dp / 3.0_dp + kt(5,:,j) / 6.0_dp )
+        end do
         
-        
-        error_ni = abs(deltime *( ki(1,:,:)*2.0_dp/30.0_dp &
+        err_ni = 0
+        err_ne = 0
+        err_nt = 0
+                
+        err_ni = abs(deltime *( ki(1,:,:)*2.0_dp/30.0_dp &
                     - ki(3,:,:)*3.0_dp/10.0_dp + ki(4,:,:)*4.0_dp/15.0_dp &
                     - ki(5,:,:)/30.0_dp ))
-        error_ne = abs(deltime *( ke(1,:,:)*2.0_dp/30.0_dp &
+        err_ne = abs(deltime *( ke(1,:,:)*2.0_dp/30.0_dp &
                     - ke(3,:,:)*3.0_dp/10.0_dp + ke(4,:,:)*4.0_dp/15.0_dp &
                     - ke(5,:,:)/30.0_dp ))
-        error_nt = abs(deltime *( kt(1,:,:)*2.0_dp/30.0_dp &
+        err_nt = abs(deltime *( kt(1,:,:)*2.0_dp/30.0_dp &
                     - kt(3,:,:)*3.0_dp/10.0_dp + kt(4,:,:)*4.0_dp/15.0_dp &
                     - kt(5,:,:)/30.0_dp ))
         
-        normerr_ni = maxval(error_ni/(abs_tol+rel_tol*abs(ni_org)))
-        normerr_ne = maxval(error_ne/(abs_tol+rel_tol*abs(ne_org)))
-        normerr_nt = maxval(error_nt/(abs_tol+rel_tol*abs(nt_org)))
+        normerr_ni = maxval(err_ni/(abs_tol+rel_tol*abs(ni_org)))
+        normerr_ne = maxval(err_ne/(abs_tol+rel_tol*abs(ne_org)))
+        normerr_nt = maxval(err_nt/(abs_tol+rel_tol*abs(nt_org)))
         
-        err_curr = (normerr_ni**2. + normerr_ne**2. + normerr_nt**2.)**0.5
+        call MPI_Reduce( normerr_ni, normerr_ni_recv, 1, MPI_REAL8, &
+                         MPI_MAX, 0, comm, ierr)
+        call MPI_Reduce( normerr_ne, normerr_ne_recv, 1, MPI_REAL8, &
+                         MPI_MAX, 0, comm, ierr)
+        call MPI_Reduce( normerr_nt, normerr_nt_recv, 1, MPI_REAL8, &
+                         MPI_MAX, 0, comm, ierr)
         
-        scaling_factor = 0.8_dp * err_curr**(-0.7_dp / 4._dp) &
-                                * err_prev**( 0.4_dp / 4._dp)
-        scaling_factor = min(2.5,max(0.3,scaling_factor))
-        
-        deltime = scaling_factor*deltime
-        deltime = max(min(fintime - time, deltime),1.d-16)
-        
+        if (rank == 0) then
+            normerr_ni = max(normerr_ni, normerr_ni_recv)
+            normerr_ne = max(normerr_ne, normerr_ne_recv)
+            normerr_nt = max(normerr_nt, normerr_nt_recv)
+            
+            
+            err_curr = (normerr_ni**2. + normerr_ne**2. + normerr_nt**2.)**0.5
+            scaling_factor = 0.8_dp * err_curr**(-0.7_dp / 4._dp) &
+                                    * err_prev**( 0.4_dp / 4._dp)
+            scaling_factor = min(2.5,max(0.3,scaling_factor))
+            deltime = scaling_factor*deltime
+            deltime = max(min(fintime - time, deltime),1.d-16)
+        end if
+
+        call MPI_BCast(deltime, 1, MPI_REAL8, 0, comm, ierr)
+        call MPI_BCast(err_curr, 1, MPI_REAL8, 0, comm, ierr)    
+       
         if (deltime == 1.d-16) then
             write(*,*) 'minimum timestep reached; finishing simulation'
             write(*,'(es10.2)') err_curr
@@ -85,6 +113,24 @@
             stop
         end if
         
+        if (.False.) then
+            write(*,100) stage, rank, deltime
+100 format('stage:',i1,' rank: ', i1, '  dt: ', e9.2)
+            write(*,*) 'ke'
+            do j = 1, nz_loc
+                write(*,110) ke(1,:,j)
+            end do
+            write(*,*) 'ki'
+            do j = 1, nz_loc
+                write(*,110) ki(1,:,j)
+            end do
+            write(*,*) 'kt'
+            do j = 1, nz_loc
+                write(*,110) kt(1,:,j)
+            end do
+110 format(10e12.4)
+            read(*,*) j
+        end if
         if (err_curr .le. 1.0_dp) then
             err_prev = err_curr
         else
@@ -111,13 +157,13 @@
          
     else if (dphi < 0) then
     
-         flux = -q * mu * (dphi / dh) * (n_pl - n_mi * exp(mu * dphi / D)) / &
-                (1.0_dp - exp(mu * dphi / D))
+         flux = -q * mu * (dphi / dh) * (n_pl - n_mi * exp(q * mu * dphi / D)) / &
+                (1.0_dp - exp(q * mu * dphi / D))
     else
     
-         flux = -q * mui * (dphi / dh) * (n_pl * exp(-mu * dphi / D) &
-                -n_mi) / (exp(-mu * dphi / D) - 1.0_dp)
-    
+         flux = -q * mu * (dphi / dh) * (n_pl * exp(-q * mu * dphi / D) &
+                -n_mi) / (exp(-q * mu * dphi / D) - 1.0_dp)
+   
     end if
     end subroutine get_flux
 
@@ -187,7 +233,7 @@
             dfluxi_dz = 2.0_dp * (fluxi_pl - fluxi_mi) / (dz_pl + dz_mi)
             dfluxe_dz = 2.0_dp * (fluxe_pl - fluxe_mi) / (dz_pl + dz_mi)
             dfluxt_dz = 2.0_dp * (fluxt_pl - fluxt_mi) / (dz_pl + dz_mi)
-
+            
         ! z-dir right electrode
         else if (side_z > 0) then
         
@@ -274,6 +320,7 @@
                            ne_mi(i,j), ne_mi(i,j+1) )
             call get_flux( fluxt_pl, dphi, dz_pl, -1, mut_pl, Dt_pl, &
                            nt_mi(i,j), nt_mi(i,j+1) )
+            
 
             ! Electrode
             if (side_z == -2) then
@@ -304,7 +351,23 @@
                 dfluxi_dz = 2.0_dp * (fluxi_pl - fluxi_z) / dz_pl
                 dfluxe_dz = 2.0_dp * (fluxe_pl - fluxe_z) / dz_pl
                 dfluxt_dz = 2.0_dp * (fluxt_pl - fluxt_z) / dz_pl
-
+                
+                if (.false.) then
+                    write(*,*)
+                    !write(*,*) 'dfluxe_dz', dfluxe_dz
+                    !write(*,111) fluxe_pl, fluxe_z, dz_pl
+                    !write(*,111) phi(i,j), phi(i,j+1), dphi, mue_pl, De_pl, &
+                    !       ne_mi(i,j), ne_mi(i,j+1)
+                    write(*,*) 'dfluxt_dz', dfluxt_dz
+                    write(*,111) fluxt_pl, fluxt_z
+                    write(*,111) Te, ve, nt_mi(i,j), nt_mi(i,j+1)
+                    write(*,111) dphi, dz_pl
+                    write(*,111) mut_pl, Dt_pl
+                    write(*,111) mut_pl * (dphi / dz_pl) * &
+                    (nt_pl(i,j+1) * exp(-mut_pl * dphi / Dt_pl) -nt_mi(i,j)) &
+                    / (exp(-mut_pl * dphi / Dt_pl) - 1.0_dp)
+                end if
+                                
             ! Vacuum
             else
                 fluxi_z = fluxi_pl
@@ -368,7 +431,7 @@
                         + fluxe_r / r(i)
             dfluxt_dr = 2.0_dp * (fluxt_pl - fluxt_mi) / (dr_pl + dr_mi) &
                         + fluxt_r / r(i)
-
+            
         ! r-dir right sdie
         else if (side_r > 0) then
         
@@ -428,16 +491,14 @@
 
             ! Vacuum
             else
-                fluxi_r = 0.0_dp
-                fluxe_r = 0.0_dp
-                fluxt_r = 0.0_dp
+                fluxi_r = fluxi_mi
+                fluxe_r = fluxe_mi
+                fluxt_r = fluxt_mi
                 
-                dfluxi_dr = 2.0_dp * (fluxi_r - fluxi_mi) / dr_mi &
-                            + fluxi_r / r(i)
-                dfluxe_dr = 2.0_dp * (fluxe_r - fluxe_mi) / dr_mi &
-                            + fluxe_r / r(i)
-                dfluxt_dr = 2.0_dp * (fluxt_r - fluxt_mi) / dr_mi &
-                            + fluxt_r / r(i)
+                dfluxi_dr = 0.0_dp
+                dfluxe_dr = 0.0_dp
+                dfluxt_dr = 0.0_dp
+                
             end if
 
         ! r-dir left
@@ -491,6 +552,7 @@
                 dfluxi_dr = (fluxi_pl - fluxi_r) / dr_pl
                 dfluxe_dr = (fluxe_pl - fluxe_r) / dr_pl
                 dfluxt_dr = (fluxt_pl - fluxt_r) / dr_pl
+                
 
             ! Vacuum
             else
@@ -501,6 +563,7 @@
                 dfluxi_dr = 4.0_dp * fluxi_pl / dr_pl
                 dfluxe_dr = 4.0_dp * fluxe_pl / dr_pl
                 dfluxt_dr = 4.0_dp * fluxt_pl / dr_pl
+                
             end if
         end if
     end if
@@ -525,25 +588,38 @@
 
     ! evaluate expression
     kt(stage,i,j) = -dfluxt_dz - dfluxt_dr + term_st1 - term_st2 - term_st3
-     
+    
+    if (.false.) then
+        write(*,*)
+        write(*,*) timestep, stage
+        write(*,111) ke(stage,i,j)
+        write(*,111) dfluxe_dz, dfluxe_dr, term_sie
+        write(*,111) ne_mi(i,j), ne_mi(i+1,j)
+        write(*,111) ni_mi(i,j), ni_mi(i+1,j)
+        write(*,111) mue(i,j)
+        write(*,111) phi(i,j), phi(i+1,j)
+    end if
+    
+    !if (timestep == 10) read(*,*) term_st3
+111 format(10e14.6)
 
     if (ki(stage,i,j) /= ki(stage,i,j)) then
         write(*,*) 'i,j:', i, j
-        write(*,*) 'ki(stage,i,j)',ki(stage,i,j)
+        write(*,*) 'ki(stage,:,j)',ki(stage,:,j)
         write(*,*) 'side_z', side_z, 'side_r', side_r
         call PetscFinalize(ierr)
         stop
     end if
     if (ke(stage,i,j) /= ke(stage,i,j)) then
         write(*,*) 'i,j:', i, j
-        write(*,*) 'ke(stage,i,j)',ke(stage,i,j)
+        write(*,*) 'ke(stage,:,j)',ke(stage,:,j)
         write(*,*) 'side_z', side_z, 'side_r', side_r
         call PetscFinalize(ierr)
         stop
     end if
     if (kt(stage,i,j) /= kt(stage,i,j)) then
         write(*,*) 'i,j:', i, j
-        write(*,*) 'ke(stage,i,j)',kt(stage,i,j)
+        write(*,*) 'ke(stage,:,j)',kt(stage,:,j)
         write(*,*) 'side_z', side_z, 'side_r', side_r
         call PetscFinalize(ierr)
         stop

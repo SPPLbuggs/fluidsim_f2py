@@ -19,8 +19,8 @@
     PetscErrorCode ierr
     PetscScalar none
     
-    integer  :: neqn, nz, nr, nz_loc
-    real(dp) :: phiL, phiR, deltime = 1e-5
+    integer  :: neqn, nz, nr, nz_loc, Jstart, Jend,timestep = 0
+    real(8) :: phiL, phiR, deltime = 1e-6
     integer, allocatable :: type_z(:,:), type_r(:,:), glob_idx(:,:), &
                             loc_idx(:,:), glob_node(:,:)
     real(dp), allocatable :: z(:), r(:), phi(:,:), ki(:,:,:), ke(:,:,:), kt(:,:,:), &
@@ -83,20 +83,20 @@
     subroutine update_coef
     integer:: node, i, j
     real(dp) :: Te
-    do node = Istart, Iend-1
-        i  = loc_idx(node+1, 1)
-        j  = loc_idx(node+1, 2)
-        Te = get_Te(nt_mi(i,j), ne_mi(i,j))
-        
-        mue(i,j) = get_mue(Te)
-        mut(i,j) = get_mut(Te)
-        De(i,j)  = get_De(Te)
-        Dt(i,j)  = get_Dt(Te)
-        nu(i,j)   = get_nu(Te)
-        k_ir(i,j) = get_k_ir(Te)
-        k_sc(i,j) = get_k_sc(Te)
-        k_si(i,j) = get_k_si(Te)
-        k_ex(i,j) = get_k_ex(Te)
+    do j = 1, nz_loc
+        do i = 1, nr
+            Te = get_Te(nt_mi(i,j), ne_mi(i,j))
+            
+            mue(i,j) = get_mue(Te)
+            mut(i,j) = get_mut(Te)
+            De(i,j)  = get_De(Te)
+            Dt(i,j)  = get_Dt(Te)
+            nu(i,j)   = get_nu(Te)
+            k_ir(i,j) = get_k_ir(Te)
+            k_sc(i,j) = get_k_sc(Te)
+            k_si(i,j) = get_k_si(Te)
+            k_ex(i,j) = get_k_ex(Te)
+        end do
     end do
     end subroutine
     
