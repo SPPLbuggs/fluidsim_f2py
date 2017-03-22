@@ -7,9 +7,9 @@
 !-----------------------------------------------------------------------
 !******************************* Laplace ******************************
 !-----------------------------------------------------------------------
-    subroutine laplace(i, j, side_z, side_r, b_temp)
+    subroutine laplace(i, j, side_r, side_z, b_temp)
     
-    integer, intent(in):: i, j, side_z, side_r
+    integer, intent(in):: i, j, side_r, side_z
     real(dp), intent(out):: b_temp
     real(dp):: dz_pl = 0, dz_mi = 0, dr_pl= 0, dr_mi= 0, &
                dphi_dz = 0, dphi_dr = 0, dphi, &
@@ -74,8 +74,6 @@
     if (nr > 1) then
         ! r-dir Center
         if (side_r .eq. 0) then
-
-        
             dr_pl = r(i+1) - r(i)
             dr_mi= r(i)   - r(i-1)
 
@@ -123,6 +121,7 @@
             de_pl  = 0.5_dp * ( De( i,j) + De( i+1,j) )
             
             ! evaluate fluxes (in x-direction)
+            dphi = phi(i+1,j) - phi(i,j)
             call get_flux( fluxi_pl, dphi, dr_pl, 1, mui, Di, &
                            ni_mi(i,j), ni_mi(i+1,j) )
             call get_flux( fluxe_pl, dphi, dr_pl, -1, mue_pl, De_pl, &
@@ -141,7 +140,7 @@
     end if
     
     ! Source term: e/epsilon*(n_i-n_e + dt*(del . flux_e - del . flux_i))
-    term_s = L0**2 * n0 * echarg / (eps * phi0) * ( ni_pl(i,j) - ne_pl(i,j) &
+    term_s = L0**2 * n0 * echarg / (eps * phi0) * ( ni_mi(i,j) - ne_mi(i,j) &
              + deltime * ( dfluxe_dz + dfluxe_dr - dfluxi_dz - dfluxi_dr ) )
 
     b_temp = (dphi_dz + dphi_dr + term_s) * max(dz_pl,dz_mi,dr_pl,dr_mi)
@@ -152,9 +151,9 @@
 !****************************** Jacobian ******************************
 !-----------------------------------------------------------------------
 
-    subroutine jacobian(i_local, j_local, i_global, j_global, side_z, side_r, &
+    subroutine jacobian(i_loc, j_loc, side_r, side_z, &
                     b_temp, cols, A_temp)
-    integer, intent(in):: i_local, j_local, i_global, j_global, side_z, side_r
+    integer, intent(in):: i_loc, j_loc, side_r, side_z
     integer, intent(inout):: cols(5)
     real(dp), intent(in):: b_temp
     real(dp), intent(inout):: A_temp(1,5)
@@ -176,14 +175,14 @@
     if (nr .eq. 1) k_stop  = 3
     
     do K = k_start, k_stop
-        if ((K .eq. 1) .and. (i_global .ne. 1)) then
-            if (glob_node(i_global-1,j_global) > 0) then
+        if ((K .eq. 1) .and. (side_r .ge. 0)) then
+            if (glob_node(i_loc-1,j_loc) > 0) then
                 width = width + 1
                 stencil(width,1) = -1
                 stencil(width,2) =  0
             end if
-        else if ((K .eq. 2) .and. (i_global .ne. nr)) then
-            if (glob_node(i_global+1,j_global) > 0) then
+        else if ((K .eq. 2) .and. (side_r .le. 0)) then
+            if (glob_node(i_loc+1,j_loc) > 0) then
                 width = width + 1
                 stencil(width,1) = 1
                 stencil(width,2) = 0
@@ -192,14 +191,14 @@
             width = width + 1
             stencil(width,1) = 0
             stencil(width,2) = 0
-        else if ((K .eq. 4) .and. (j_global .ne. nz)) then
-            if (glob_node(i_global,j_global+1) > 0) then
+        else if ((K .eq. 4) .and. (side_z .le. 0)) then
+            if (glob_node(i_loc,j_loc+1) > 0) then
                 width = width + 1
                 stencil(width,1) = 0
                 stencil(width,2) = 1
             end if
-        else if ((K .eq. 5) .and. (j_global .ne. 1)) then
-            if (glob_node(i_global,j_global-1) > 0) then
+        else if ((K .eq. 5) .and. (side_z .ge. 0)) then
+            if (glob_node(i_loc,j_loc-1) > 0) then
                 width = width + 1
                 stencil(width,1) =  0
                 stencil(width,2) = -1
@@ -208,8 +207,8 @@
     end do
     
     DO k=1, width
-        I = i_local + stencil(k,1)
-        J = j_local + stencil(k,2)
+        I = i_loc + stencil(k,1)
+        J = j_loc + stencil(k,2)
         
         zero_perturb = .false.
         cols_idz = cols_idz + 1
@@ -221,15 +220,15 @@
             zero_perturb = .true.
             phi(I,J) = perturb
         end if
-        call laplace(i_local, j_local, side_z, side_r, b_pert)
+        call laplace(i_loc, j_loc, side_r, side_z, b_pert)
         if (.not. zero_perturb) then
             phi(I,J) = temp
         else
             phi(I,J) = 1
         end if
         
-        cols(cols_idz) = glob_node(i_global + stencil(k,1), &
-                                     j_global + stencil(k,2)) - 1
+        cols(cols_idz) = glob_node(i_loc + stencil(k,1), &
+                                     j_loc + stencil(k,2)) - 1
         A_temp(1,cols_idz) = (b_pert - b_temp)/(phi(I,J)*perturb)
         
         if (Zero_Perturb) then

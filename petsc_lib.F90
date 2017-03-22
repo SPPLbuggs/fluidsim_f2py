@@ -5,7 +5,7 @@
     contains 
     subroutine petsc_initialize
     
-    integer:: i_glob, j_glob, loc_cols, loc_rows
+    integer:: i, j, loc_neqn
 
     call PetscInitialize(petsc_null_character, ierr)
     comm = PETSC_COMM_WORLD
@@ -17,16 +17,20 @@
         
     ! create parallel matrix
     call MatCreate(comm,A,ierr)
+    
+    Jstart = 2
+    Jend   = nz_loc-1
+    if (rank == 0) Jstart = 1
+    if (rank == tasks-1) Jend = nz_loc
 
-    loc_cols = neqn
-    loc_rows = 0
-    do j_glob = max(1,nz/tasks*rank+1), min(nz,nz/tasks*(rank+1))
-        do i_glob = 1,nr
-            if (glob_node(i_glob, j_glob) > 0) loc_rows = loc_rows+1
+    loc_neqn = 0
+    do j = Jstart, Jend
+        do i = 1,nr
+            if (glob_node(i, j) > 0) loc_neqn = loc_neqn+1
         end do
     end do
             
-    call MatSetSizes(A,loc_rows,loc_rows,neqn,neqn,ierr)
+    call MatSetSizes(A,loc_neqn,loc_neqn,neqn,neqn,ierr)
     call MatSetUp(A,ierr)
         
     call MatSetFromOptions(A,ierr)
@@ -37,9 +41,9 @@
     call MatGetOwnershipRange(A,Istart,Iend,ierr)
 
     ! create parallel vectors
-    call VecCreateMPI(comm,loc_rows,neqn,u,ierr)
-    call VecCreateMPI(comm,loc_rows,neqn,b,ierr)
-    call VecCreateMPI(comm,loc_rows,neqn,x,ierr)
+    call VecCreateMPI(comm,loc_neqn,neqn,u,ierr)
+    call VecCreateMPI(comm,loc_neqn,neqn,b,ierr)
+    call VecCreateMPI(comm,loc_neqn,neqn,x,ierr)
     call VecSetFromOptions(u,ierr)
     call VecSetFromOptions(b,ierr)
     call VecSetFromOptions(x,ierr)

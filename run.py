@@ -33,11 +33,15 @@ if nz%size != 0:
 # setup problem
 r,z,phi = setup_problem(nz,nr,rank,size)
 
-main.mod.initialize(1e-7,1e-7,5e5)
+# tolerances: (default: 1e-5, 1e-50, 1e4, 1e4)
+rtol = 1e-5
+atol = 1e-50
+
+main.mod.initialize(rtol,atol)
 #main.mod.view()
 
 
-runtime = 1
+runtime = 10
 main.mod.run(runtime)
 
 if rank == 0:
@@ -75,12 +79,11 @@ if rank == 0:
     plt.ylabel('Z-axis (mm)')
     plt.title('Potential (V)')
     plt.show()
-    
     plt.figure()
     plt.contourf(r,z_global,ne_global,30)
     plt.colorbar()
     plt.xlabel('Radius (mm)')
     plt.ylabel('Z-axis (mm)')
     plt.title('Electron Density ()')
-    plt.show()
+    #plt.show()
 

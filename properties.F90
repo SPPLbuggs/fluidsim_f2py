@@ -201,7 +201,7 @@
     end function get_De
 
     function get_Dt(T)
-    integer :: get_Dt
+    real(dp) :: get_Dt
     real(dp), intent(in):: T
     real(dp):: x,a,b,c,d,e,f,g,h,k
     a = 55.3840545867

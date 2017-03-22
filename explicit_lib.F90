@@ -143,29 +143,29 @@
 !-----------------------------------------------------------------------
 !****************************** Get Flux ******************************
 !-----------------------------------------------------------------------
-    subroutine get_flux(flux, dphi, dh, q, mu, D, n_pl, n_mi)
+    subroutine get_flux( flux, dphi, dh, q, mu, D, n_left, n_right )
     real(dp), intent(inout) :: flux
     integer, intent(in) :: q
-    real(dp), intent(in) :: dphi, dh, mu, D, n_pl, n_mi
-    real(dp) :: tol
+    real(dp), intent(in) :: dphi, dh, mu, D, n_left, n_right
+    real(dp) :: v, tol
     
     tol = 1e-12_dp
+    v = - q * mu * dphi / dh   
     
     if (abs(dphi) < tol) then
-         
-         flux = D * (n_pl - n_mi) / dh
-         
-    else if (dphi < 0) then
+        flux = D * (n_left - n_right) / dh
     
-         flux = -q * mu * (dphi / dh) * (n_pl - n_mi * exp(q * mu * dphi / D)) / &
-                (1.0_dp - exp(q * mu * dphi / D))
+    ! Positive exponentials blow up,
+    !  so rewrite always as negative exp.
+    !  this is the same analytical expression
+    else if (q * dphi < 0) then
+        flux = v * ( n_left - n_right * exp( -v * dh / D) ) &
+                 / ( 1.0_dp - exp( -v * dh / D) )
     else
-    
-         flux = -q * mu * (dphi / dh) * (n_pl * exp(-q * mu * dphi / D) &
-                -n_mi) / (exp(-q * mu * dphi / D) - 1.0_dp)
-   
+        flux = v * ( n_right - n_left * exp( v * dh / D) ) &
+                 / ( exp( v * dh / D) - 1.0_dp)
     end if
-    end subroutine get_flux
+    end subroutine
 
 !-----------------------------------------------------------------------
 !***************************** Continuity *****************************
@@ -374,9 +374,9 @@
                 fluxe_z = fluxe_pl
                 fluxt_z = fluxt_pl
                 
-                dfluxi_dz = 0.0_dp
-                dfluxe_dz = 0.0_dp
-                dfluxt_dz = 0.0_dp
+                dfluxi_dz = 0
+                dfluxe_dz = 0
+                dfluxt_dz = 0
             end if
         end if
     end if
@@ -455,52 +455,14 @@
             call get_flux( fluxt_mi, dphi, dr_mi, -1, mut_mi, Dt_mi, &
                            nt_mi(i-1,j), nt_mi(i,j) )
 
-            ! Electrode
-            if (side_r == 2) then
+            fluxi_r = fluxi_mi
+            fluxe_r = fluxe_mi
+            fluxt_r = fluxt_mi
             
-                ! dot product: n.gamma
-                ! n = 1
-                if (Er > 0) then
-                ! defines alpha in flux bc
-                    flux_coef = 1.0_dp
-                else
-                    flux_coef = 0.0_dp
-                end if
-
-                ! check if node is part of cathode
-                if ((phiL > phiR) .and. (side_r == 2)) then
-                    anode_coef = 1.0_dp
-                else
-                    anode_coef = 0.0_dp
-                end if
-
-                ve = sqrt( (8.0_dp * echarg * Te) / (pi * me)) * tau0 / l0
-                fluxi_r = 0.25_dp * vi * ni_mi(i,j) &
-                          + flux_coef * mui * ni_mi(i,j) * Er
-                fluxe_r = 0.25_dp * ve * ne_mi(i,j) &
-                          - anode_coef * gamma * fluxi_r
-                fluxt_r = 1.0_dp/3 * ve * nt_mi(i,j) &
-                          - 4.0_dp/3 * anode_coef * gamma * Te * fluxi_r
-
-                dfluxi_dr = 2.0_dp * (fluxi_r - fluxi_mi) / dr_mi &
-                            + fluxi_r / r(i)
-                dfluxe_dr = 2.0_dp * (fluxe_r - fluxe_mi) / dr_mi &
-                            + fluxe_r / r(i)
-                dfluxt_dr = 2.0_dp * (fluxt_r - fluxt_mi) / dr_mi &
-                            + fluxt_r / r(i)
-
-            ! Vacuum
-            else
-                fluxi_r = fluxi_mi
-                fluxe_r = fluxe_mi
-                fluxt_r = fluxt_mi
-                
-                dfluxi_dr = 0.0_dp
-                dfluxe_dr = 0.0_dp
-                dfluxt_dr = 0.0_dp
-                
-            end if
-
+            dfluxi_dr = 0
+            dfluxe_dr = 0
+            dfluxt_dr = 0
+            
         ! r-dir left
         else if (side_r < 0) then
             ! grid spacing
@@ -522,59 +484,20 @@
                            ne_mi(i,j), ne_mi(i+1,j) )
             call get_flux( fluxt_pl, dphi, dr_pl, -1, mut_pl, Dt_pl, &
                            nt_mi(i,j), nt_mi(i+1,j) )
-
-            ! Electrode
-            if (side_r == -2) then
-                ! dot product: n.gamma
-                ! n = -1
-                if (-Er > 0) then
-                    ! defines alpha in flux bc
-                    flux_coef = 1.0_dp
-                else
-                    flux_coef = 0.0_dp
-                end if
-
-                if ( (phiL < phiR) .and. (side_r == -2) ) then
-                    anode_coef = 1.0_dp
-                else
-                    anode_coef = 0.0_dp
-                end if
-
-                ve = sqrt( (8.0_dp * echarg * Te) / (pi * me)) * tau0 / l0
+            
+            fluxi_r = 0
+            fluxi_r = 0
+            fluxt_r = 0
                 
-                fluxi_r = -0.25_dp * vi * ni_mi(i,j) &
-                          + flux_coef * mui * ni_mi(i,j) * Er
-                fluxe_r = -0.25_dp * ve * ne_mi(i,j) &
-                          - anode_coef * gamma * fluxi_r
-                fluxt_r = -1.0_dp/3 * ve * nt_mi(i,j) &
-                          -4.0_dp/3 * anode_coef * gamma * Te * fluxi_r
-
-                dfluxi_dr = (fluxi_pl - fluxi_r) / dr_pl
-                dfluxe_dr = (fluxe_pl - fluxe_r) / dr_pl
-                dfluxt_dr = (fluxt_pl - fluxt_r) / dr_pl
-                
-
-            ! Vacuum
-            else
-                fluxi_r = 0.0_dp
-                fluxe_r = 0.0_dp
-                fluxt_r = 0.0_dp
-                
-                dfluxi_dr = 4.0_dp * fluxi_pl / dr_pl
-                dfluxe_dr = 4.0_dp * fluxe_pl / dr_pl
-                dfluxt_dr = 4.0_dp * fluxt_pl / dr_pl
-                
-            end if
+            dfluxi_dr = 4.0_dp * fluxi_pl / dr_pl
+            dfluxe_dr = 4.0_dp * fluxe_pl / dr_pl
+            dfluxt_dr = 4.0_dp * fluxt_pl / dr_pl
         end if
     end if
 
     ! evaluate source terms
     term_sie = k_ir(i,j) * ninf/n0 * ne_mi(i,j) - beta * ni_mi(i,j) * ne_mi(i,j)
-   
-    ! evaluate expression
-    ki(stage,i,j) = -dfluxi_dz - dfluxi_dr + term_sie
-    ke(stage,i,j) = -dfluxe_dz - dfluxe_dr + term_sie
-    
+      
     ! -e flux_e . E
     term_st1 = -echarg * phi0 / (3.0_dp/2 * kb*T0) &
                * ( fluxe_z * Ez + fluxe_r * Er)
@@ -587,39 +510,46 @@
                + h_ex * k_ex(i,j) * ninf/n0 * ne_mi(i,j)
 
     ! evaluate expression
+    ki(stage,i,j) = -dfluxi_dz - dfluxi_dr + term_sie
+    ke(stage,i,j) = -dfluxe_dz - dfluxe_dr + term_sie
     kt(stage,i,j) = -dfluxt_dz - dfluxt_dr + term_st1 - term_st2 - term_st3
     
-    if (.false.) then
+    if ((glob_node(i,j) == 1991) .and. (.false.)) then
         write(*,*)
-        write(*,*) timestep, stage
+        write(*,*) rank, timestep, stage, i, j
         write(*,111) ke(stage,i,j)
         write(*,111) dfluxe_dz, dfluxe_dr, term_sie
+        write(*,111) nt_mi(i,j), nt_mi(i+1,j)
         write(*,111) ne_mi(i,j), ne_mi(i+1,j)
         write(*,111) ni_mi(i,j), ni_mi(i+1,j)
-        write(*,111) mue(i,j)
+        write(*,111) mut(i,j), Dt(i,j)
         write(*,111) phi(i,j), phi(i+1,j)
+        write(*,111) Te
     end if
     
-    !if (timestep == 10) read(*,*) term_st3
-111 format(10e14.6)
+    !if (timestep == 40) read(*,*) term_st3
+111 format(10es14.6)
 
     if (ki(stage,i,j) /= ki(stage,i,j)) then
-        write(*,*) 'i,j:', i, j
-        write(*,*) 'ki(stage,:,j)',ki(stage,:,j)
+        write(*,*) 'i,j,rank:', i, j, rank
+        write(*,*) 'ki(stage,:,j)',ki(stage,i,j)
         write(*,*) 'side_z', side_z, 'side_r', side_r
         call PetscFinalize(ierr)
         stop
     end if
     if (ke(stage,i,j) /= ke(stage,i,j)) then
-        write(*,*) 'i,j:', i, j
-        write(*,*) 'ke(stage,:,j)',ke(stage,:,j)
+        write(*,*) 'i,j,rank:', i, j, rank
+        write(*,*) 'node:', glob_node(i,j)
+        write(*,*) 'ke(stage,:,j)',ke(stage,i,j)
         write(*,*) 'side_z', side_z, 'side_r', side_r
         call PetscFinalize(ierr)
         stop
     end if
     if (kt(stage,i,j) /= kt(stage,i,j)) then
+        write(*,*) 'time,stage:', timestep, stage
         write(*,*) 'i,j:', i, j
-        write(*,*) 'ke(stage,:,j)',kt(stage,:,j)
+        write(*,*) 'node:', glob_node(i,j)
+        write(*,*) 'kt(stage,:,j)',kt(stage,i,j)
         write(*,*) 'side_z', side_z, 'side_r', side_r
         call PetscFinalize(ierr)
         stop

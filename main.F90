@@ -18,12 +18,12 @@
 !***************************** Initialize *****************************
 !-----------------------------------------------------------------------
 
-    subroutine initialize(rel_err, abs_err, max_iter)
-    integer, intent(in) :: max_iter
-    real(dp), intent(in) :: rel_err, abs_err
-    integer:: i_glob, j_glob, i_loc, j_loc, node, cols(5)
-    real(dp):: A_temp(1,5), b_temp, soln
-
+    subroutine initialize(rel_tol, abs_tol)
+    !f2py real(8), intent(in):: rel_tol, abs_tol
+    real(dp), intent(in) :: rel_tol, abs_tol
+    integer:: i, j, rows, cols(5)
+    real(dp):: A_temp(1,5), b_temp
+    
     call petsc_initialize
     
     allocate( ki(5, nr, nz_loc), ke(5, nr, nz_loc), kt(5, nr, nz_loc), &
@@ -37,36 +37,27 @@
     ne_org = ne_pl
     nt_mi  = nt_pl
     nt_org = nt_pl
-    
-    Jstart = 2
-    Jend   = nz_loc-1
-    if (rank == 0) Jstart = 1
-    if (rank == tasks-1) Jend = nz_loc
-    
+       
     call update_coef
     
     ! update boundary conditions
     !call update_bc
     
     ! assemble A and b
-    do node = Istart, Iend-1
-        i_loc  = loc_idx(node+1, 1)
-        j_loc  = loc_idx(node+1, 2)
-        i_glob = glob_idx(node+1,1)
-        j_glob = glob_idx(node+1,2)
-               
-        b_temp =  0.0_dp
-        A_temp =  0.0_dp
-        cols   = -5
-        
-        call laplace(i_loc, j_loc, type_z(i_loc,j_loc), &
-                     type_r(i_loc,j_loc), b_temp)
-        call jacobian(i_loc, j_loc, i_glob, j_glob, &
-                      type_z(i_loc,j_loc), type_r(i_loc,j_loc), &
-                      b_temp, cols, A_temp)
-        
-        call MatSetValues(A, 1, node, 5, cols, A_temp, insert_values, ierr)
-        call VecSetValues(b, 1, node, -b_temp, insert_values, ierr)
+    do j = Jstart, Jend
+        do i = 1, nr
+            
+            b_temp =  0.0_dp
+            A_temp =  0.0_dp
+            cols   = -1
+            rows   = glob_node(i,j) - 1
+            
+            call laplace(i, j, type_r(i,j), type_z(i,j), b_temp)
+            call jacobian(i, j, type_r(i,j), type_z(i,j), b_temp, cols, A_temp)
+            
+            call MatSetValues(A, 1, rows, 5, cols, A_temp, insert_values, ierr)
+            call VecSetValues(b, 1, rows, -b_temp, insert_values, ierr)
+        end do
     end do
     
     call MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY,ierr)
@@ -79,8 +70,8 @@
     call KSPCreate(comm,ksp,ierr)
     call KSPSetOperators(ksp,A,A,ierr)
     call KSPSetFromOptions(ksp,ierr)
-    !call KSPSetTolerances(ksp,PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL, & 
-    !                      PETSC_DEFAULT_REAL,max_iter,ierr)
+    call KSPSetTolerances(ksp,rel_tol,abs_tol, & 
+                          PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,ierr)
     
     end subroutine
 !-----------------------------------------------------------------------
@@ -99,10 +90,10 @@
     subroutine run(fintime)
     !f2py real(8), intent(in):: fintime
     real(dp), intent(in):: fintime
-    integer  :: i_loc, j_loc, i_glob, j_glob, &
-                node, stage, recv_status, Nprint = 1
+    integer  :: i, j, node, stage, recv_status, Nprint = 100
     real(dp) :: time = 0, stime, itime, etime, ftime, b_temp, &
-                err_prev = 1, soln = 0
+                err_prev = 1, soln = 0,  &
+                avg_itime = 0, avg_etime = 0, avg_stime = 0
     
     do
         call cpu_time(stime)
@@ -110,14 +101,19 @@
         
         ! solve implicit system
         call KSPSolve(ksp,b,x,ierr)
+        call KSPGetIterationNumber(ksp,its,ierr)
         
         call cpu_time(itime)
         ! update loc implicit variables
-        do node = Istart, Iend - 1
-            call VecGetValues(x, 1, node, soln, ierr)
-            i_loc = loc_idx(node + 1, 1)
-            j_loc = loc_idx(node + 1, 2)
-            phi(i_loc, j_loc) = phi(i_loc, j_loc) + soln
+        do j = Jstart, Jend
+            do i = 1, nr
+                node = glob_node(i,j) - 1
+
+                if (node .ge. 0) then
+                    call VecGetValues(x, 1, node, soln, ierr)
+                    phi(i, j) = phi(i, j) + soln
+                end if
+            end do
         end do
         
         ! communicate loc boundary nodes
@@ -145,17 +141,14 @@
             
             call update_coef
             
-            do j_loc = Jstart, Jend
-                do i_loc = 1, nr
-                    call continuity(i_loc, j_loc, type_r(i_loc,j_loc), &
-                                    type_z(i_loc,j_loc), stage)
+            do j = Jstart, Jend
+                do i = 1, nr
+                    call continuity(i, j, type_r(i,j), type_z(i,j), stage)
                 end do
             end do
             
             call rk_step(stage, time, fintime, err_prev)
         end do
-        
-        call cpu_time(etime)
         
         ! communicate loc boundary nodes
         if (rank .ne. 0) then
@@ -191,6 +184,8 @@
                           rank-1, 16, comm, recv_status, ierr)
         end if
         
+        call cpu_time(etime)
+        
         time = time + deltime
         
         ni_mi  = ni_pl
@@ -201,37 +196,46 @@
         nt_org = nt_pl
         
         call cpu_time(ftime)
+        if (timestep == 1) then
+            avg_stime = ftime - stime
+            avg_itime = itime - stime
+            avg_etime = etime - itime
+        else
+            avg_stime = avg_stime - 0.01_dp * (avg_stime - ftime + stime)
+            avg_itime = avg_itime - 0.01_dp * (avg_itime - itime + stime)
+            avg_etime = avg_etime - 0.01_dp * (avg_etime - etime + itime)
+        end if
         
         if ( (timestep - int(timestep/Nprint)*Nprint == 0) .and. (rank == 0) ) then
             write(6,90) timestep/Nprint, int(log10(real(Nprint))), deltime, time, fintime
-            write(6,91) ftime-stime, itime-stime, etime-itime
+            call KSPGetIterationNumber(ksp,its,ierr)
+            write(6,91) avg_stime, avg_itime, avg_etime, its
             write(*,*)
         end if
-90 format('Step # ', i4,'e',i1 '  dT:', e9.2, '  Time:', e9.2, '  Final Time:', f4.1)
-91 format('  time/s: ', f5.3, '  iTime: ', f5.3, ' eTime: ', f5.3)
+90 format('Step # ', i4,'e',i1 '  dT:', es9.2, '  Time:', es9.2, '  Final Time:', f4.1)
+91 format('  time/s: ', f5.3, '  iTime: ', f5.3, ' eTime: ', f5.3, '  ksp:', i4)
+
         
         if (time >= fintime) exit
         
         ! update boundary nodes
         
         ! assemble b for next timestep
-        do node = Istart, Iend-1
-            i_loc  = loc_idx(node+1, 1)
-            j_loc  = loc_idx(node+1, 2)
-            i_glob = glob_idx(node+1,1)
-            j_glob = glob_idx(node+1,2)
-        
-            b_temp = 0.0_dp
-        
-            call laplace(i_loc, j_loc, type_z(i_loc,j_loc), &
-                         type_r(i_loc,j_loc), b_temp)
-        
-            call VecSetValues(b, 1, node, -b_temp, insert_values, ierr)
+        call VecSet(b,0,ierr)
+        do j = Jstart, Jend
+            do i = 1, nr
+                b_temp =  0.0_dp
+                node   = glob_node(i,j) - 1
+                
+                call laplace(i, j, type_r(i,j), type_z(i,j), b_temp)
+                call VecSetValues(b, 1, node, -b_temp, insert_values, ierr)
+            end do
         end do
 
         call vecassemblybegin(b, ierr)
         call vecassemblyend(b, ierr)
     end do
+    
     call petsc_finalize
     end subroutine
     

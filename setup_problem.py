@@ -29,22 +29,23 @@ def setup_problem(nz,nr,rank,size):
         stencil = 3
     
     # linear spacing
-    z = np.linspace(0,length,nz)/len_0
-    r = np.linspace(0,radius,nr)/len_0
+    #z = np.linspace(0,length,nz)/len_0
+    r = np.linspace(0,radius,nr)/len_0  
+
     
     # hyperbolic tangent spacing
-#    z = np.linspace(-1.5,1.5,nz)
-#    z = np.tanh(z)*0.5+0.5
-#    z = z-z[0]
-#    z = z/z[-1]
-#    z = z*length/len_0
-    
-#    r = np.linspace(-1.5,0,nz)
-#    r = np.tanh(r)*0.5+0.5
-#    r = r-r[0]
-#    r = r/r[-1]
-#    r = r*radius/len_0
-    
+    z = np.linspace(-1.5,1.5,nz)
+    z = np.tanh(z)*0.5+0.5
+    z = z-z[0]
+    z = z/z[-1]
+    z = z*length/len_0
+    """
+    r = np.linspace(-1.5,0,nr)
+    r = np.tanh(r)*0.5+0.5
+    r = r-r[0]
+    r = r/r[-1]
+    r = r*radius/len_0
+    """    
     ne = np.ones([nr,nz])
     ni = ne
     nm = ne
@@ -100,6 +101,7 @@ def setup_problem(nz,nr,rank,size):
     phi = phi[:,Jstart:Jend]
     type_z = type_z[:,Jstart:Jend]
     type_r = type_r[:,Jstart:Jend]
+    node_global = node_global[:,Jstart:Jend]
     
     ne = np.ones([nr,len(z)])*init/n_0
     ni = ne
