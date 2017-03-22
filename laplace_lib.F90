@@ -138,6 +138,7 @@
              + deltime * ( dfluxe_dz + dfluxe_dr - dfluxi_dz - dfluxi_dr ) )
 
     b_temp = (dphi_dz + dphi_dr + term_s) * max(dz_pl,dz_mi,dr_pl,dr_mi)
+    
 
     if (term_s /= term_s) then
         write(*,*)
@@ -161,7 +162,7 @@
         write(*,111) dphi_dz, dphi_dr, term_s, max(dz_pl,dz_mi,dr_pl,dr_mi)
         read(*,*) term_s
     end if
-111 format(10es10.2)
+111 format(10es14.6)
     end subroutine
     
 !-----------------------------------------------------------------------

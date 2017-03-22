@@ -80,8 +80,8 @@
 !-----------------------------------------------------------------------
     subroutine view
     integer :: wait
-    call VecView(b,PETSC_VIEWER_STDOUT_WORLD,ierr)
     call MatView(A,PETSC_VIEWER_STDOUT_WORLD,ierr)
+    call VecView(b,PETSC_VIEWER_STDOUT_WORLD,ierr)
     read(*,*) wait
     end subroutine
 
@@ -103,8 +103,7 @@
         timestep = timestep + 1
         
         ! solve implicit system
-        !call VecView(b,PETSC_VIEWER_STDOUT_WORLD,ierr)
-        !read(*,*) j
+        !call view
         call KSPSolve(ksp,b,x,ierr)
         call KSPGetIterationNumber(ksp,its,ierr)
         
@@ -139,7 +138,7 @@
                           rank-1, 16, comm, recv_status, ierr)
         
         call MPI_Barrier( comm, ierr )
-        
+
         ! solve explicit system
         stage = 0
         ki = 0

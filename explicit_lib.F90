@@ -447,14 +447,48 @@
                            ne_mi(i,j-1), ne_mi(i,j) )
             call get_flux( fluxt_mi, dphi, dr_mi, -1, mut_mi, Dt_mi, &
                            nt_mi(i,j-1), nt_mi(i,j) )
-
-            fluxi_r = fluxi_mi
-            fluxe_r = fluxe_mi
-            fluxt_r = fluxt_mi
             
-            dfluxi_dr = 0
-            dfluxe_dr = 0
-            dfluxt_dr = 0
+            ! Electrode (typically only for 1d-r)
+            if (side_r == 2) then
+            
+                ! dot product: n.gamma
+                ! n = 1
+                if (Er > 0) then
+                ! defines alpha in flux bc
+                    flux_coef = 1.0_dp
+                else
+                    flux_coef = 0.0_dp
+                end if
+
+                ! check if node is part of cathode
+                if ( phiL > phiR ) then
+                    anode_coef = 1.0_dp
+                else
+                    anode_coef = 0.0_dp
+                end if
+
+                ve = sqrt( (8.0_dp * echarg * Te) / (pi * me)) * tau0 / l0
+                fluxi_r = 0.25_dp * vi * ni_mi(i,j) &
+                          + flux_coef * mui * ni_mi(i,j) * Er
+                fluxe_r = 0.25_dp * ve * ne_mi(i,j) &
+                          - anode_coef * gamma * fluxi_r
+                fluxt_r = 1.0_dp/3 * ve * nt_mi(i,j) &
+                          - 4.0_dp/3 * anode_coef * gamma * Te * fluxi_r
+
+                dfluxi_dr = 2.0_dp * (fluxi_r - fluxi_mi) / dr_mi
+                dfluxe_dr = 2.0_dp * (fluxe_r - fluxe_mi) / dr_mi
+                dfluxt_dr = 2.0_dp * (fluxt_r - fluxt_mi) / dr_mi
+            
+            ! Vacuum
+            else
+                fluxi_r = fluxi_mi
+                fluxe_r = fluxe_mi
+                fluxt_r = fluxt_mi
+                
+                dfluxi_dr = 0
+                dfluxe_dr = 0
+                dfluxt_dr = 0
+            end if
             
         ! r-dir left
         else if (side_r < 0) then
@@ -478,14 +512,47 @@
             call get_flux( fluxt_pl, dphi, dr_pl, -1, mut_pl, Dt_pl, &
                            nt_mi(i,j), nt_mi(i,j+1) )
             
-            fluxi_r = 0
-            fluxe_r = 0
-            fluxt_r = 0
+            
+            ! Electrode (typically only for 1d-r)
+            if (side_r == -2) then
+                ! dot product: n.gamma
+                ! n = -1
+                if (-Er > 0) then
+                    ! defines alpha in flux bc
+                    flux_coef = 1.0_dp
+                else
+                    flux_coef = 0.0_dp
+                end if
+
+                if ( (phiL < phiR) .and. (side_r == -2) ) then
+                    anode_coef = 1.0_dp
+                else
+                    anode_coef = 0.0_dp
+                end if
+
+                ve = sqrt( (8.0_dp * echarg * Te) / (pi * me)) * tau0 / l0
                 
-            dfluxi_dr = 4.0_dp * fluxi_pl / dr_pl
-            dfluxe_dr = 4.0_dp * fluxe_pl / dr_pl
-            dfluxt_dr = 4.0_dp * fluxt_pl / dr_pl
-                
+                fluxi_r = -0.25_dp * vi * ni_mi(i,j) &
+                          + flux_coef * mui * ni_mi(i,j) * Er
+                fluxe_r = -0.25_dp * ve * ne_mi(i,j) &
+                          - anode_coef * gamma * fluxi_r
+                fluxt_r = -1.0_dp/3 * ve * nt_mi(i,j) &
+                          - 4.0_dp/3 * anode_coef * gamma * Te * fluxi_r
+
+                dfluxi_dr = 2.0_dp * (fluxi_pl - fluxi_r) / dr_pl
+                dfluxe_dr = 2.0_dp * (fluxe_pl - fluxe_r) / dr_pl
+                dfluxt_dr = 2.0_dp * (fluxt_pl - fluxt_r) / dr_pl
+                                
+            ! Vacuum
+            else
+                fluxi_r = 0
+                fluxe_r = 0
+                fluxt_r = 0
+                    
+                dfluxi_dr = 4.0_dp * fluxi_pl / dr_pl
+                dfluxe_dr = 4.0_dp * fluxe_pl / dr_pl
+                dfluxt_dr = 4.0_dp * fluxt_pl / dr_pl
+            end if
         end if
     end if
 
