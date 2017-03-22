@@ -19,14 +19,14 @@
     PetscErrorCode ierr
     PetscScalar none
     
-    integer  :: neqn, nz, nr, nz_loc, Jstart, Jend,timestep = 0
+    integer  :: neqn, nz, nr, nr_loc, Jstart, Jend,timestep = 0
     real(8) :: phiL, phiR, deltime = 1e-6
-    integer, allocatable :: type_z(:,:), type_r(:,:), glob_idx(:,:), &
-                            loc_idx(:,:), glob_node(:,:)
+    integer, allocatable :: type_z(:,:), type_r(:,:), glob_node(:,:)
     real(dp), allocatable :: z(:), r(:), phi(:,:), ki(:,:,:), ke(:,:,:), kt(:,:,:), &
                              ni_mi(:,:), ni_pl(:,:), ni_org(:,:), &
                              ne_mi(:,:), ne_pl(:,:), ne_org(:,:), &
-                             nt_mi(:,:), nt_pl(:,:), nt_org(:,:)
+                             nt_mi(:,:), nt_pl(:,:), nt_org(:,:), &
+                             phi_save(:,:,:), ne_save(:,:,:)
     
     ! non-dimensional parameters
     real(dp), parameter:: L0   = 1e-3_dp
@@ -73,19 +73,17 @@
     real(dp), parameter:: gamma =   0.075_dp
   
     ! Updatable variables
-    real(dp), allocatable, dimension(:, :) :: mue, mut
-    real(dp), allocatable, dimension(:, :) :: De, Dt
-    real(dp), allocatable, dimension(:, :) :: nu
-    real(dp), allocatable, dimension(:, :) :: k_ir, k_ex, k_sc, k_si
+    real(dp), allocatable, dimension(:, :) :: mue, mut, De, Dt, nu, &
+                                              k_ir, k_ex, k_sc, k_si
 
     contains
     
     subroutine update_coef
     integer:: node, i, j
     real(dp) :: Te
-    do j = 1, nz_loc
-        do i = 1, nr
-            Te = get_Te(nt_mi(i,j), ne_mi(i,j))
+    do j = 1, nr_loc
+        do i = 1, nz
+            Te = get_Te( nt_mi(i,j), ne_mi(i,j) )
             
             mue(i,j) = get_mue(Te)
             mut(i,j) = get_mut(Te)
@@ -96,34 +94,11 @@
             k_sc(i,j) = get_k_sc(Te)
             k_si(i,j) = get_k_si(Te)
             k_ex(i,j) = get_k_ex(Te)
+            
         end do
     end do
     end subroutine
-    
-    subroutine update_bc
-    integer :: i_loc, j_loc, i_glob, j_glob, node
-    !assuming DC bc right now.
-    ! phiR = 
-    ! phiL = 
-    do j_glob = 1, nz
-        do i_glob = 1, nr
-            node = glob_node(i_glob, j_glob)
-            if ( (node >= Istart) .and. (node < Iend) ) then
-                if (type_z(i_glob, j_glob) == -2) then
-                    i_loc = loc_idx(node+1,1)
-                    j_loc = loc_idx(node+1,2)
-                    phi(i_loc, j_loc) = phiR
-                end if
-                if (type_z(i_glob, j_glob) == 2) then
-                    i_loc = loc_idx(node+1,1)
-                    j_loc = loc_idx(node+1,2)
-                    phi(i_loc, j_loc) = phiR
-                end if
-             end if
-         end do
-     end do
-     end subroutine
-    
+       
     function get_Te(nt,ne)
     real(dp):: get_Te
     real(dp), intent(in) :: nt, ne
@@ -150,9 +125,9 @@
     g = -0.0012183881312
     h = -5.6471677382e-05
     k =  2.11510269874e-05
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_mue = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7. + k*x**8.) / ninf * tau0 * phi0 / l0**2
     return
@@ -171,9 +146,9 @@
     g = -0.00153955670552
     h = -2.38690441212d-05
     k =  2.58672391609d-05
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_mut = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7. + k*x**8.) / ninf * tau0 * phi0 / l0**2
     return
@@ -192,9 +167,9 @@
     g = -0.00121973056843
     h = -5.65037595561e-05
     k =  2.1177126055e-05
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_De = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7. + k*x**8.) / ninf * tau0 / l0**2
     return
@@ -213,9 +188,9 @@
     g = -0.001539248252
     h = -2.3830286892e-05
     k =  2.58597001685e-05
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_Dt = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7. + k*x**8.) / ninf * tau0 / l0**2
     return
@@ -234,9 +209,9 @@
     g =  -0.259359346989
     h =   0.0279182131315
     k =  -0.00124438710099
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_k_ex = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7. + k*x**8.) * tau0 * n0
     return
@@ -255,9 +230,9 @@
     g =  -0.156771317788
     h =   0.0153819279555
     k =  -0.000638729430911
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_k_ir = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7. + k*x**8.) * tau0 * n0
     return
@@ -276,9 +251,9 @@
     g =  -0.000983504760785
     h =  -0.000160952834008
     k =   2.37965210684e-05
-    x = log(T*3./2.)
-    if (x > log(200.)) x = log(200.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(2e2_dp))  x = log(2e2_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_nu = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. + g*x**6. + h*x**7 + k*x**8.) * ninf * tau0
     return
@@ -294,9 +269,9 @@
     d =   1.27257798891
     e =  -0.67840685073
     f =   0.10591014464
-    x = log(T*3./2.)
-    if (x > log(16.)) x = log(16.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(16.0_dp)) x = log(16.0_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_k_sc = exp(a + b*x + c*x**2. + d*x**3. + e*x**4. &
         + f*x**5. ) / 1.0d6 * n0 * tau0
     return
@@ -311,9 +286,9 @@
     c = -28.1169537586
     d =   8.28853856817
     e =  -0.931626144207
-    x = log(T*3./2.)
-    if (x > log(16.)) x = log(16.)
-    if (x < log(1.d-2)) x = log(1.d-2)
+    x = log(T*3.0_dp/2.0_dp)
+    if (x > log(16.0_dp)) x = log(16.0_dp)
+    if (x < log(1e-2_dp)) x = log(1e-2_dp)
     get_k_si = exp(a + b*x + c*x**2. + d*x**3. + e*x**4.) &
         / 1.0d6 * n0 * tau0
     return

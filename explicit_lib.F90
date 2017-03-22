@@ -11,8 +11,8 @@
     integer, intent(inout) :: stage
     real(dp), intent(in) :: time, fintime
     real(dp), intent(inout) :: err_prev
-    real(dp) :: err_ni(nr, nz_loc), err_ne(nr, nz_loc), &
-                err_nt(nr, nz_loc), normerr_ni, normerr_ne, &
+    real(dp) :: err_ni(nz, nr_loc), err_ne(nz, nr_loc), &
+                err_nt(nz, nr_loc), normerr_ni, normerr_ne, &
                 normerr_nt, normerr_ni_recv, normerr_ne_recv, normerr_nt_recv, &
                 err_curr, scaling_factor, abs_tol = 1e-4, rel_tol = 1e-4
     integer :: j
@@ -102,6 +102,33 @@
             deltime = scaling_factor*deltime
             deltime = max(min(fintime - time, deltime),1.d-16)
         end if
+        
+        if (.false.) then
+            write(*,100) stage, deltime
+100 format('stage:',i1, ' dt: ', e9.2)
+            write(*,*) 'ke'
+            do j = 1, nr
+                write(*,110) ke(5,:,j)
+            end do
+            write(*,*) 'k_i'
+            do j = 1, nr
+                write(*,110) ki(5,:,j)
+            end do
+            write(*,*) 'kt'
+            do j = 1, nr
+                write(*,110) kt(5,:,j)
+            end do
+            write(*,*) 'ne'
+            do j = 1, nr
+                write(*,110) ne_pl(:,j)
+            end do
+            write(*,*) 'phi'
+            do j = 1, nr
+                write(*,110) phi(:,j)
+            end do
+110 format(10e14.6)
+            read(*,*) j
+        end if
 
         call MPI_BCast(deltime, 1, MPI_REAL8, 0, comm, ierr)
         call MPI_BCast(err_curr, 1, MPI_REAL8, 0, comm, ierr)    
@@ -113,24 +140,6 @@
             stop
         end if
         
-        if (.False.) then
-            write(*,100) stage, rank, deltime
-100 format('stage:',i1,' rank: ', i1, '  dt: ', e9.2)
-            write(*,*) 'ke'
-            do j = 1, nz_loc
-                write(*,110) ke(1,:,j)
-            end do
-            write(*,*) 'ki'
-            do j = 1, nz_loc
-                write(*,110) ki(1,:,j)
-            end do
-            write(*,*) 'kt'
-            do j = 1, nz_loc
-                write(*,110) kt(1,:,j)
-            end do
-110 format(10e12.4)
-            read(*,*) j
-        end if
         if (err_curr .le. 1.0_dp) then
             err_prev = err_curr
         else
@@ -163,14 +172,14 @@
                  / ( 1.0_dp - exp( -v * dh / D) )
     else
         flux = v * ( n_right - n_left * exp( v * dh / D) ) &
-                 / ( exp( v * dh / D) - 1.0_dp)
+                 / ( 1.0_dp  - exp( v * dh / D))
     end if
     end subroutine
 
 !-----------------------------------------------------------------------
 !***************************** Continuity *****************************
 !-----------------------------------------------------------------------
-    subroutine continuity(i, j, side_r, side_z, stage)
+    subroutine continuity(i,j, side_r, side_z, stage)
     use properties
     integer, intent(in):: i, j, side_r, side_z, stage
     real(dp):: dz_pl, dz_mi, dr_pl, dr_mi, &
@@ -190,40 +199,40 @@
     if (nz > 1) then
         if (side_z == 0) then
             ! grid spacing
-            dz_pl = z(j+1) - z(j)
-            dz_mi = z(j)   - z(j-1)
+            dz_pl = z(i+1) - z(i)
+            dz_mi = z(i)   - z(i-1)
 
             ! rates and coefficients
-            mue_pl = 0.5_dp * ( mue(i,j) + mue(i,j+1) )
-            mue_mi = 0.5_dp * ( mue(i,j) + mue(i,j-1) )
-            De_pl  = 0.5_dp * ( De( i,j) + De( i,j+1) )
-            De_mi  = 0.5_dp * ( De( i,j) + De( i,j-1) )
+            mue_pl = 0.5_dp * ( mue(i,j) + mue(i+1,j) )
+            mue_mi = 0.5_dp * ( mue(i,j) + mue(i-1,j) )
+            De_pl  = 0.5_dp * ( De( i,j) + De( i+1,j) )
+            De_mi  = 0.5_dp * ( De( i,j) + De( i-1,j) )
             
-            mut_pl = 0.5_dp * ( mut(i,j) + mut(i,j+1) )
-            mut_mi = 0.5_dp * ( mut(i,j) + mut(i,j-1) )
-            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i,j+1) )
-            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i,j-1) )
+            mut_pl = 0.5_dp * ( mut(i,j) + mut(i+1,j) )
+            mut_mi = 0.5_dp * ( mut(i,j) + mut(i-1,j) )
+            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i+1,j) )
+            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i-1,j) )
 
             ! evaluate fluxes (in z-direction)
-            dphi = phi(i,j+1) - phi(i,j)
+            dphi = phi(i+1,j) - phi(i,j)
             Ez   = -dphi / dz_pl
             
             call get_flux( fluxi_pl, dphi, dz_pl, 1, mui, Di, &
-                           ni_mi(i,j), ni_mi(i,j+1) )
+                           ni_mi(i,j), ni_mi(i+1,j) )
             call get_flux( fluxe_pl, dphi, dz_pl, -1, mue_pl, De_pl, &
-                           ne_mi(i,j), ne_mi(i,j+1) )
+                           ne_mi(i,j), ne_mi(i+1,j) )
             call get_flux( fluxt_pl, dphi, dz_pl, -1, mut_pl, Dt_pl, &
-                           nt_mi(i,j), nt_mi(i,j+1) )
+                           nt_mi(i,j), nt_mi(i+1,j) )
 
-            dphi = phi(i,j) - phi(i,j-1)
+            dphi = phi(i,j) - phi(i-1,j)
             Ez   = (Ez - dphi / dz_mi) / 2.0_dp
             
             call get_flux( fluxi_mi, dphi, dz_mi, 1, mui, Di, &
-                           ni_mi(i,j-1), ni_mi(i,j) )
+                           ni_mi(i-1,j), ni_mi(i,j) )
             call get_flux( fluxe_mi, dphi, dz_mi, -1, mue_mi, De_mi, &
-                           ne_mi(i,j-1), ne_mi(i,j) )
+                           ne_mi(i-1,j), ne_mi(i,j) )
             call get_flux( fluxt_mi, dphi, dz_mi, -1, mut_mi, Dt_mi, &
-                           nt_mi(i,j-1), nt_mi(i,j) )
+                           nt_mi(i-1,j), nt_mi(i,j) )
 
             fluxi_z = 0.5_dp * (fluxi_pl + fluxi_mi)
             fluxe_z = 0.5_dp * (fluxe_pl + fluxe_mi)
@@ -238,24 +247,24 @@
         else if (side_z > 0) then
         
             ! grid spacing
-            dz_mi = z(j) - z(j-1)
-            dphi  = phi(i,j) - phi(i,j-1)
+            dz_mi = z(i) - z(i-1)
+            dphi  = phi(i,j) - phi(i-1,j)
             Ez    = -dphi / dz_mi
 
             ! rates and coefficients
-            mue_mi = 0.5_dp * ( mue(i,j) + mue(i,j-1) )
-            De_mi  = 0.5_dp * ( De( i,j) + De( i,j-1) )
+            mue_mi = 0.5_dp * ( mue(i,j) + mue(i-1,j) )
+            De_mi  = 0.5_dp * ( De( i,j) + De( i-1,j) )
             
-            mut_mi = 0.5_dp * ( mut(i,j) + mut(i,j-1) )
-            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i,j-1) )
+            mut_mi = 0.5_dp * ( mut(i,j) + mut(i-1,j) )
+            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i-1,j) )
 
             ! evaluate fluxes (in x-direction)
             call get_flux( fluxi_mi, dphi, dz_mi,  1, mui, Di, &
-                           ni_mi(i,j-1), ni_mi(i,j) )
+                           ni_mi(i-1,j), ni_mi(i,j) )
             call get_flux( fluxe_mi, dphi, dz_mi, -1, mue_mi, De_mi, &
-                           ne_mi(i,j-1), ne_mi(i,j) )
+                           ne_mi(i-1,j), ne_mi(i,j) )
             call get_flux( fluxt_mi, dphi, dz_mi, -1, mut_mi, Dt_mi, &
-                           nt_mi(i,j-1), nt_mi(i,j) )
+                           nt_mi(i-1,j), nt_mi(i,j) )
 
             ! Electrode
             if (side_z == 2) then
@@ -302,24 +311,24 @@
         ! z-dir left
         else if (side_z < 0) then
             ! grid spacing
-            dz_pl =  z(j+1) - z(j)
-            dphi  =  phi(i,j+1) - phi(i,j)
+            dz_pl =  z(i+1) - z(i)
+            dphi  =  phi(i+1,j) - phi(i,j)
             Ez    = -dphi / dz_pl
 
             ! rates and coefficients
-            mue_pl = 0.5_dp * ( mue(i,j) + mue(i,j+1) )
-            de_pl  = 0.5_dp * ( De( i,j) + De( i,j+1) )
+            mue_pl = 0.5_dp * ( mue(i,j) + mue(i+1,j) )
+            de_pl  = 0.5_dp * ( De( i,j) + De( i+1,j) )
             
-            mut_pl = 0.5_dp * ( mut(i,j) + mut(i,j+1) )
-            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i,j+1) )
+            mut_pl = 0.5_dp * ( mut(i,j) + mut(i+1,j) )
+            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i+1,j) )
             
             ! evaluate fluxes (in x-direction)
             call get_flux( fluxi_pl, dphi, dz_pl, 1, mui, Di, &
-                           ni_mi(i,j), ni_mi(i,j+1) )
+                           ni_mi(i,j), ni_mi(i+1,j) )
             call get_flux( fluxe_pl, dphi, dz_pl, -1, mue_pl, De_pl, &
-                           ne_mi(i,j), ne_mi(i,j+1) )
+                           ne_mi(i,j), ne_mi(i+1,j) )
             call get_flux( fluxt_pl, dphi, dz_pl, -1, mut_pl, Dt_pl, &
-                           nt_mi(i,j), nt_mi(i,j+1) )
+                           nt_mi(i,j), nt_mi(i+1,j) )
             
 
             ! Electrode
@@ -351,22 +360,6 @@
                 dfluxi_dz = 2.0_dp * (fluxi_pl - fluxi_z) / dz_pl
                 dfluxe_dz = 2.0_dp * (fluxe_pl - fluxe_z) / dz_pl
                 dfluxt_dz = 2.0_dp * (fluxt_pl - fluxt_z) / dz_pl
-                
-                if (.false.) then
-                    write(*,*)
-                    !write(*,*) 'dfluxe_dz', dfluxe_dz
-                    !write(*,111) fluxe_pl, fluxe_z, dz_pl
-                    !write(*,111) phi(i,j), phi(i,j+1), dphi, mue_pl, De_pl, &
-                    !       ne_mi(i,j), ne_mi(i,j+1)
-                    write(*,*) 'dfluxt_dz', dfluxt_dz
-                    write(*,111) fluxt_pl, fluxt_z
-                    write(*,111) Te, ve, nt_mi(i,j), nt_mi(i,j+1)
-                    write(*,111) dphi, dz_pl
-                    write(*,111) mut_pl, Dt_pl
-                    write(*,111) mut_pl * (dphi / dz_pl) * &
-                    (nt_pl(i,j+1) * exp(-mut_pl * dphi / Dt_pl) -nt_mi(i,j)) &
-                    / (exp(-mut_pl * dphi / Dt_pl) - 1.0_dp)
-                end if
                                 
             ! Vacuum
             else
@@ -385,40 +378,40 @@
     if (nr > 1) then
         if (side_r == 0) then
             ! grid spacing
-            dr_pl = r(i+1) - r(i)
-            dr_mi = r(i)   - r(i-1)
+            dr_pl = r(j+1) - r(j)
+            dr_mi = r(j)   - r(j-1)
 
             ! rates and coefficients
-            mue_pl = 0.5_dp * ( mue(i,j) + mue(i+1,j) )
-            mue_mi = 0.5_dp * ( mue(i,j) + mue(i-1,j) )
-            De_pl  = 0.5_dp * ( De( i,j) + De( i+1,j) )
-            De_mi  = 0.5_dp * ( De( i,j) + De( i-1,j) )
+            mue_pl = 0.5_dp * ( mue(i,j) + mue(i,j+1) )
+            mue_mi = 0.5_dp * ( mue(i,j) + mue(i,j-1) )
+            De_pl  = 0.5_dp * ( De( i,j) + De( i,j+1) )
+            De_mi  = 0.5_dp * ( De( i,j) + De( i,j-1) )
             
-            mut_pl = 0.5_dp * ( mut(i,j) + mut(i+1,j) )
-            mut_mi = 0.5_dp * ( mut(i,j) + mut(i-1,j) )
-            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i+1,j) )
-            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i-1,j) )
+            mut_pl = 0.5_dp * ( mut(i,j) + mut(i,j+1) )
+            mut_mi = 0.5_dp * ( mut(i,j) + mut(i,j-1) )
+            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i,j+1) )
+            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i,j-1) )
 
             ! evaluate fluxes
-            dphi = phi(i+1,j) - phi(i,j)
+            dphi = phi(i,j+1) - phi(i,j)
             Er   = -dphi / dr_pl
             
             call get_flux( fluxi_pl, dphi, dr_pl, 1, mui, Di, &
-                           ni_mi(i,j), ni_mi(i+1,j) )
+                           ni_mi(i,j), ni_mi(i,j+1) )
             call get_flux( fluxe_pl, dphi, dr_pl, -1, mue_pl, De_pl, &
-                           ne_mi(i,j), ne_mi(i+1,j) )
+                           ne_mi(i,j), ne_mi(i,j+1) )
             call get_flux( fluxt_pl, dphi, dr_pl, -1, mut_pl, Dt_pl, &
-                           nt_mi(i,j), nt_mi(i+1,j) )
+                           nt_mi(i,j), nt_mi(i,j+1) )
 
-            dphi = phi(i,j) - phi(i-1,j)
+            dphi = phi(i,j) - phi(i,j-1)
             Er   = (Er - dphi / dr_mi) / 2.0_dp
             
             call get_flux( fluxi_mi, dphi, dr_mi, 1, mui, Di, &
-                           ni_mi(i-1,j), ni_mi(i,j) )
+                           ni_mi(i,j-1), ni_mi(i,j) )
             call get_flux( fluxe_mi, dphi, dr_mi, -1, mue_mi, De_mi, &
-                           ne_mi(i-1,j), ne_mi(i,j) )
+                           ne_mi(i,j-1), ne_mi(i,j) )
             call get_flux( fluxt_mi, dphi, dr_mi, -1, mut_mi, Dt_mi, &
-                           nt_mi(i-1,j), nt_mi(i,j) )
+                           nt_mi(i,j-1), nt_mi(i,j) )
 
             fluxi_r = 0.5_dp * (fluxi_pl + fluxi_mi)
             fluxe_r = 0.5_dp * (fluxe_pl + fluxe_mi)
@@ -426,34 +419,34 @@
 
             ! flux gradients
             dfluxi_dr = 2.0_dp * (fluxi_pl - fluxi_mi) / (dr_pl + dr_mi) &
-                        + fluxi_r / r(i)
+                        + fluxi_r / r(j)
             dfluxe_dr = 2.0_dp * (fluxe_pl - fluxe_mi) / (dr_pl + dr_mi) &
-                        + fluxe_r / r(i)
+                        + fluxe_r / r(j)
             dfluxt_dr = 2.0_dp * (fluxt_pl - fluxt_mi) / (dr_pl + dr_mi) &
-                        + fluxt_r / r(i)
+                        + fluxt_r / r(j)
             
-        ! r-dir right sdie
+        ! r-dir right side
         else if (side_r > 0) then
         
             ! grid spacing
-            dr_mi =  r(i) - r(i-1)
-            dphi  =  phi(i,j) - phi(i-1,j)
+            dr_mi =  r(j) - r(j-1)
+            dphi  =  phi(i,j) - phi(i,j-1)
             Er    = -dphi / dr_mi
 
             ! rates and coefficients
-            mue_mi = 0.5_dp * ( mue(i,j) + mue(i-1,j) )
-            De_mi  = 0.5_dp * ( De( i,j) + De( i-1,j) )
+            mue_mi = 0.5_dp * ( mue(i,j) + mue(i,j-1) )
+            De_mi  = 0.5_dp * ( De( i,j) + De( i,j-1) )
             
-            mut_mi = 0.5_dp * ( mut(i,j) + mut(i-1,j) )
-            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i-1,j) )
+            mut_mi = 0.5_dp * ( mut(i,j) + mut(i,j-1) )
+            Dt_mi  = 0.5_dp * ( Dt( i,j) + Dt( i,j-1) )
 
             ! evaluate fluxes
             call get_flux( fluxi_mi, dphi, dr_mi, 1, mui, Di, &
-                           ni_mi(i-1,j), ni_mi(i,j) )
+                           ni_mi(i,j-1), ni_mi(i,j) )
             call get_flux( fluxe_mi, dphi, dr_mi, -1, mue_mi, De_mi, &
-                           ne_mi(i-1,j), ne_mi(i,j) )
+                           ne_mi(i,j-1), ne_mi(i,j) )
             call get_flux( fluxt_mi, dphi, dr_mi, -1, mut_mi, Dt_mi, &
-                           nt_mi(i-1,j), nt_mi(i,j) )
+                           nt_mi(i,j-1), nt_mi(i,j) )
 
             fluxi_r = fluxi_mi
             fluxe_r = fluxe_mi
@@ -466,32 +459,33 @@
         ! r-dir left
         else if (side_r < 0) then
             ! grid spacing
-            dr_pl =  r(i+1) - r(i)
-            dphi  =  phi(i+1,j) - phi(i,j)
+            dr_pl =  r(j+1) - r(j)
+            dphi  =  phi(i,j+1) - phi(i,j)
             Er    = -dphi / dr_pl
 
             ! rates and coefficients
-            mue_pl = 0.5_dp * ( mue(i,j) + mue(i+1,j) )
-            de_pl  = 0.5_dp * ( De( i,j) + De( i+1,j) )
+            mue_pl = 0.5_dp * ( mue(i,j) + mue(i,j+1) )
+            de_pl  = 0.5_dp * ( De( i,j) + De( i,j+1) )
             
-            mut_pl = 0.5_dp * ( mut(i,j) + mut(i+1,j) )
-            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i+1,j) )
+            mut_pl = 0.5_dp * ( mut(i,j) + mut(i,j+1) )
+            Dt_pl  = 0.5_dp * ( Dt( i,j) + Dt( i,j+1) )
             
             ! evaluate fluxes (in x-direction)
             call get_flux( fluxi_pl, dphi, dr_pl, 1, mui, Di, &
-                           ni_mi(i,j), ni_mi(i+1,j) )
+                           ni_mi(i,j), ni_mi(i,j+1) )
             call get_flux( fluxe_pl, dphi, dr_pl, -1, mue_pl, De_pl, &
-                           ne_mi(i,j), ne_mi(i+1,j) )
+                           ne_mi(i,j), ne_mi(i,j+1) )
             call get_flux( fluxt_pl, dphi, dr_pl, -1, mut_pl, Dt_pl, &
-                           nt_mi(i,j), nt_mi(i+1,j) )
+                           nt_mi(i,j), nt_mi(i,j+1) )
             
             fluxi_r = 0
-            fluxi_r = 0
+            fluxe_r = 0
             fluxt_r = 0
                 
             dfluxi_dr = 4.0_dp * fluxi_pl / dr_pl
             dfluxe_dr = 4.0_dp * fluxe_pl / dr_pl
             dfluxt_dr = 4.0_dp * fluxt_pl / dr_pl
+                
         end if
     end if
 
@@ -514,20 +508,23 @@
     ke(stage,i,j) = -dfluxe_dz - dfluxe_dr + term_sie
     kt(stage,i,j) = -dfluxt_dz - dfluxt_dr + term_st1 - term_st2 - term_st3
     
-    if ((glob_node(i,j) == 1991) .and. (.false.)) then
+    if ((i==1) .and. (j==1) .and. (.false.)) then
         write(*,*)
-        write(*,*) rank, timestep, stage, i, j
+        write(*,'(7i3)') rank, timestep, stage, i, j, side_z, side_r
+
         write(*,111) ke(stage,i,j)
         write(*,111) dfluxe_dz, dfluxe_dr, term_sie
-        write(*,111) nt_mi(i,j), nt_mi(i+1,j)
-        write(*,111) ne_mi(i,j), ne_mi(i+1,j)
+        write(*,*)
+        write(*,111) ki(stage,i,j)
+        write(*,111) dfluxi_dz, dfluxi_dr, term_sie
+        write(*,*)
         write(*,111) ni_mi(i,j), ni_mi(i+1,j)
-        write(*,111) mut(i,j), Dt(i,j)
+        write(*,111) ne_mi(i,j), ne_mi(i+1,j)
+        write(*,111) mue(i,j), De(i,j)
         write(*,111) phi(i,j), phi(i+1,j)
         write(*,111) Te
+        read(*,*) term_sie
     end if
-    
-    !if (timestep == 40) read(*,*) term_st3
 111 format(10es14.6)
 
     if (ki(stage,i,j) /= ki(stage,i,j)) then

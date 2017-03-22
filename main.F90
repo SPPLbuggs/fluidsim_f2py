@@ -5,12 +5,12 @@
     use explicit_lib
     implicit none
     
-    !f2py integer:: neqn, nz, nr, nz_loc
+    !f2py integer:: neqn, nr, nz, nr_loc
     !f2py real(8):: phiL, phiR
-    !f2py integer, allocatable :: type_z(:,:), type_r(:,:), glob_idx(:,:)
-    !f2py integer, allocatable :: loc_idx(:,:), glob_node(:,:)
+    !f2py integer, allocatable :: type_z(:,:), type_r(:,:), glob_node(:,:)
     !f2py real(8), allocatable :: z(:), r(:), phi(:,:)
     !f2py real(8), allocatable :: ni_pl(:,:), ne_pl(:,:), nt_pl(:,:)
+    !f2py real(8), allocatable :: phi_save(:,:,:), ne_save(:,:,:)
     
     
     contains
@@ -26,10 +26,10 @@
     
     call petsc_initialize
     
-    allocate( ki(5, nr, nz_loc), ke(5, nr, nz_loc), kt(5, nr, nz_loc), &
-              nu(nr, nz_loc), mue(nr, nz_loc), mut(nr, nz_loc), &
-              De(nr, nz_loc), Dt(nr,nz_loc), k_ir(nr, nz_loc), &
-              k_ex(nr, nz_loc), k_sc(nr, nz_loc), k_si(nr, nz_loc) )
+    allocate( ki(5, nz, nr_loc), ke(5, nz, nr_loc), kt(5, nz, nr_loc), &
+              nu(nz, nr_loc), mue(nz, nr_loc), mut(nz, nr_loc), &
+              De(nz, nr_loc), Dt(nz, nr_loc), k_ir(nz, nr_loc), &
+              k_ex(nz, nr_loc), k_sc(nz, nr_loc), k_si(nz, nr_loc) )
     
     ni_mi  = ni_pl
     ni_org = ni_pl
@@ -37,21 +37,22 @@
     ne_org = ne_pl
     nt_mi  = nt_pl
     nt_org = nt_pl
-       
-    call update_coef
     
+    call update_coef
     ! update boundary conditions
     !call update_bc
-    
+
     ! assemble A and b
     do j = Jstart, Jend
-        do i = 1, nr
+        do i = 1, nz
             
             b_temp =  0.0_dp
             A_temp =  0.0_dp
             cols   = -1
             rows   = glob_node(i,j) - 1
             
+            if (rows < 0) cycle
+               
             call laplace(i, j, type_r(i,j), type_z(i,j), b_temp)
             call jacobian(i, j, type_r(i,j), type_z(i,j), b_temp, cols, A_temp)
             
@@ -59,13 +60,13 @@
             call VecSetValues(b, 1, rows, -b_temp, insert_values, ierr)
         end do
     end do
-    
+
     call MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY,ierr)
     call MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY,ierr)
     
     call vecassemblybegin(b, ierr)
     call vecassemblyend(b, ierr)
-
+    
     ! create linear solver
     call KSPCreate(comm,ksp,ierr)
     call KSPSetOperators(ksp,A,A,ierr)
@@ -78,19 +79,21 @@
 !******************************** View ********************************
 !-----------------------------------------------------------------------
     subroutine view
-    
+    integer :: wait
     call VecView(b,PETSC_VIEWER_STDOUT_WORLD,ierr)
     call MatView(A,PETSC_VIEWER_STDOUT_WORLD,ierr)
-    
+    read(*,*) wait
     end subroutine
 
 !-----------------------------------------------------------------------
 !******************************** Run *********************************
 !-----------------------------------------------------------------------
-    subroutine run(fintime)
-    !f2py real(8), intent(in):: fintime
-    real(dp), intent(in):: fintime
-    integer  :: i, j, node, stage, recv_status, Nprint = 100
+    subroutine run(fintime,savetime,nsave)
+    !f2py integer, intent(in):: nsave
+    !f2py real(8), intent(in):: fintime, savetime(nsave)
+    integer, intent(in) :: nsave
+    real(dp), intent(in):: fintime, savetime(nsave)
+    integer  :: i, j, node, stage, recv_status, Nprint = 1000, ksave = 1
     real(dp) :: time = 0, stime, itime, etime, ftime, b_temp, &
                 err_prev = 1, soln = 0,  &
                 avg_itime = 0, avg_etime = 0, avg_stime = 0
@@ -100,13 +103,15 @@
         timestep = timestep + 1
         
         ! solve implicit system
+        !call VecView(b,PETSC_VIEWER_STDOUT_WORLD,ierr)
+        !read(*,*) j
         call KSPSolve(ksp,b,x,ierr)
         call KSPGetIterationNumber(ksp,its,ierr)
         
         call cpu_time(itime)
         ! update loc implicit variables
         do j = Jstart, Jend
-            do i = 1, nr
+            do i = 1, nz
                 node = glob_node(i,j) - 1
 
                 if (node .ge. 0) then
@@ -116,20 +121,25 @@
             end do
         end do
         
-        ! communicate loc boundary nodes
+        ! communicate loc boundary nodes               
         if (rank .ne. 0) &
-            call MPI_Send(phi(:,2), nr, MPI_REAL8, &
+            call MPI_Send(phi(:,2), nz, MPI_REAL8, &
                           rank-1, 15, comm, ierr)
+        
         if (rank .ne. tasks -1) &
-            call MPI_Send(phi(:,nz_loc-1), nr, MPI_REAL8, &
+            call MPI_Send(phi(:,nr_loc-1), nz, MPI_REAL8, &
                           rank+1, 16, comm, ierr)
+        
         if (rank .ne. tasks-1) &
-            call MPI_Recv(phi(:,nz_loc), nr, MPI_REAL8, &
+            call MPI_Recv(phi(:,nr_loc), nz, MPI_REAL8, &
                           rank+1, 15, comm, recv_status, ierr)
+        
         if (rank .ne. 0) &
-            call MPI_Recv(phi(:,1), nr, MPI_REAL8, &
+            call MPI_Recv(phi(:,1), nz, MPI_REAL8, &
                           rank-1, 16, comm, recv_status, ierr)
-
+        
+        call MPI_Barrier( comm, ierr )
+        
         ! solve explicit system
         stage = 0
         ki = 0
@@ -142,7 +152,7 @@
             call update_coef
             
             do j = Jstart, Jend
-                do i = 1, nr
+                do i = 1, nz
                     call continuity(i, j, type_r(i,j), type_z(i,j), stage)
                 end do
             end do
@@ -152,37 +162,39 @@
         
         ! communicate loc boundary nodes
         if (rank .ne. 0) then
-            call MPI_Send(ni_pl(:,2), nr, MPI_REAL8, &
+            call MPI_Send(ni_pl(:,2), nz, MPI_REAL8, &
                           rank-1, 15, comm, ierr)
-            call MPI_Send(ne_pl(:,2), nr, MPI_REAL8, &
+            call MPI_Send(ne_pl(:,2), nz, MPI_REAL8, &
                           rank-1, 15, comm, ierr)
-            call MPI_Send(nt_pl(:,2), nr, MPI_REAL8, &
+            call MPI_Send(nt_pl(:,2), nz, MPI_REAL8, &
                           rank-1, 15, comm, ierr)
         end if
         if (rank .ne. tasks -1) then
-            call MPI_Send(ni_pl(:,nz_loc-1), nr, MPI_REAL8, &
+            call MPI_Send(ni_pl(:,nr_loc-1), nz, MPI_REAL8, &
                           rank+1, 16, comm, ierr)
-            call MPI_Send(ne_pl(:,nz_loc-1), nr, MPI_REAL8, &
+            call MPI_Send(ne_pl(:,nr_loc-1), nz, MPI_REAL8, &
                           rank+1, 16, comm, ierr)
-            call MPI_Send(nt_pl(:,nz_loc-1), nr, MPI_REAL8, &
+            call MPI_Send(nt_pl(:,nr_loc-1), nz, MPI_REAL8, &
                           rank+1, 16, comm, ierr)
         end if
         if (rank .ne. tasks-1) then
-            call MPI_Recv(ni_pl(:,nz_loc), nr, MPI_REAL8, &
+            call MPI_Recv(ni_pl(:,nr_loc), nz, MPI_REAL8, &
                           rank+1, 15, comm, recv_status, ierr)
-            call MPI_Recv(ne_pl(:,nz_loc), nr, MPI_REAL8, &
+            call MPI_Recv(ne_pl(:,nr_loc), nz, MPI_REAL8, &
                           rank+1, 15, comm, recv_status, ierr)
-            call MPI_Recv(nt_pl(:,nz_loc), nr, MPI_REAL8, &
+            call MPI_Recv(nt_pl(:,nr_loc), nz, MPI_REAL8, &
                           rank+1, 15, comm, recv_status, ierr)
         end if
         if (rank .ne. 0) then
-            call MPI_Recv(ni_pl(:,1), nr, MPI_REAL8, &
+            call MPI_Recv(ni_pl(:,1), nz, MPI_REAL8, &
                           rank-1, 16, comm, recv_status, ierr)
-            call MPI_Recv(ni_pl(:,1), nr, MPI_REAL8, &
+            call MPI_Recv(ne_pl(:,1), nz, MPI_REAL8, &
                           rank-1, 16, comm, recv_status, ierr)
-            call MPI_Recv(ni_pl(:,1), nr, MPI_REAL8, &
+            call MPI_Recv(nt_pl(:,1), nz, MPI_REAL8, &
                           rank-1, 16, comm, recv_status, ierr)
         end if
+        
+        call MPI_Barrier( comm, ierr )
         
         call cpu_time(etime)
         
@@ -194,6 +206,12 @@
         ne_org = ne_pl
         nt_mi  = nt_pl
         nt_org = nt_pl
+        
+        if (time >= savetime(ksave)) then
+            phi_save(:,:,ksave) = phi
+            ne_save(:,:,ksave) = ne_pl
+            ksave = ksave+1
+        end if
         
         call cpu_time(ftime)
         if (timestep == 1) then
@@ -215,7 +233,6 @@
 90 format('Step # ', i4,'e',i1 '  dT:', es9.2, '  Time:', es9.2, '  Final Time:', f4.1)
 91 format('  time/s: ', f5.3, '  iTime: ', f5.3, ' eTime: ', f5.3, '  ksp:', i4)
 
-        
         if (time >= fintime) exit
         
         ! update boundary nodes
@@ -223,7 +240,7 @@
         ! assemble b for next timestep
         call VecSet(b,0,ierr)
         do j = Jstart, Jend
-            do i = 1, nr
+            do i = 1, nz
                 b_temp =  0.0_dp
                 node   = glob_node(i,j) - 1
                 

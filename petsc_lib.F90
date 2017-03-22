@@ -19,17 +19,17 @@
     call MatCreate(comm,A,ierr)
     
     Jstart = 2
-    Jend   = nz_loc-1
+    Jend   = nr_loc-1
     if (rank == 0) Jstart = 1
-    if (rank == tasks-1) Jend = nz_loc
+    if (rank == tasks-1) Jend = nr_loc
 
     loc_neqn = 0
     do j = Jstart, Jend
-        do i = 1,nr
+        do i = 1, nz
             if (glob_node(i, j) > 0) loc_neqn = loc_neqn+1
         end do
     end do
-            
+                
     call MatSetSizes(A,loc_neqn,loc_neqn,neqn,neqn,ierr)
     call MatSetUp(A,ierr)
         

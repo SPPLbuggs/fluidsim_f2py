@@ -31,7 +31,8 @@ def setup_problem(nz,nr,rank,size):
     # linear spacing
     #z = np.linspace(0,length,nz)/len_0
     r = np.linspace(0,radius,nr)/len_0  
-
+    
+    
     
     # hyperbolic tangent spacing
     z = np.linspace(-1.5,1.5,nz)
@@ -45,32 +46,29 @@ def setup_problem(nz,nr,rank,size):
     r = r-r[0]
     r = r/r[-1]
     r = r*radius/len_0
-    """    
-    ne = np.ones([nr,nz])
-    ni = ne
-    nm = ne
-    nt = ne*Te_init
-    phi = np.zeros([nr,nz],order='F')/phi_0
+    """
 
-    type_z = np.zeros([nr,nz],'int')
-    type_r = np.zeros([nr,nz],'int')
+    phi = np.zeros([nz,nr],order='F')/phi_0
+
+    type_z = np.zeros([nz,nr],'int')
+    type_r = np.zeros([nz,nr],'int')
     
     if nz > 1:
-        for i in range(nr):
-            for j in range(nz):
-                if i == nr - 1:
+        for i in range(nz):
+            for j in range(nr):
+                if j == nr - 1:
                     type_r[i,j] = 1
-                elif i == 0:
+                elif j == 0:
                     type_r[i,j] = -1
             
-                if j == nz-1:
-                    if e_start/len_0 <= r[i] <= e_stop/len_0:
+                if i == nz-1:
+                    if e_start/len_0 <= r[j] <= e_stop/len_0:
                         type_z[i,j] = 2
                         phi[i,j] = v_r/phi_0
                     else:
                         type_z[i,j] = 1
-                elif j == 0:
-                    if e_start/len_0 <= r[i] <= e_stop/len_0:
+                elif i == 0:
+                    if e_start/len_0 <= r[j] <= e_stop/len_0:
                         type_z[i,j] = -2
                         phi[i,j] = v_l/phi_0
                     else:
@@ -78,45 +76,44 @@ def setup_problem(nz,nr,rank,size):
     
     global_idx  = np.zeros([nz*nr,2],'int',order='F')
     local_idx   = np.zeros([nz*nr,2],'int',order='F')
-    node_global = np.zeros([nr,nz],'int',order='F')
+    node_global = np.zeros([nz,nr],'int',order='F')
     
     neqn = 0
     j_loc = 0
     temp = 0
-    for j in range(nz):
-        for i in range(nr):
+    for j in range(nr):
+        for i in range(nz):
             if abs(type_z[i,j]) != 2:
                 global_idx[neqn,:] = [i+1,j+1]
                 local_idx[neqn,:] = [i+1,j_loc+1]
                 neqn += 1
                 node_global[i,j] = neqn
         j_loc += 1
-        if j_loc > nz/size-1+temp:
+        if j_loc > nr/size-1+temp:
             temp = 1
             j_loc = 1
     
-    Jstart = max(0,nz/size*rank-1)
-    Jend   = min(nz,nz/size*(rank+1))+1
-    z   = z[Jstart:Jend]
+    Jstart = max(0,nr/size*rank-1)
+    Jend   = min(nr,nr/size*(rank+1))+1
+       
+    r   = r[Jstart:Jend]
     phi = phi[:,Jstart:Jend]
     type_z = type_z[:,Jstart:Jend]
     type_r = type_r[:,Jstart:Jend]
     node_global = node_global[:,Jstart:Jend]
-    
-    ne = np.ones([nr,len(z)])*init/n_0
+       
+    ne = np.ones([nz,len(r)])*init/n_0
     ni = ne
     nt = ne*Te_init
-    
+       
     main.mod.neqn      = neqn
     main.mod.nz        = nz
     main.mod.nr        = nr
-    main.mod.nz_loc    = len(z)
+    main.mod.nr_loc    = len(r)
     main.mod.phir      = v_r
     main.mod.phil      = v_l
     main.mod.type_z    = type_z
     main.mod.type_r    = type_r
-    main.mod.glob_idx  = global_idx
-    main.mod.loc_idx   = local_idx
     main.mod.glob_node = node_global
     main.mod.z         = z
     main.mod.r         = r
@@ -125,31 +122,4 @@ def setup_problem(nz,nr,rank,size):
     main.mod.ni_pl     = ni
     main.mod.nt_pl     = nt
 
-    return r,z,phi
-if __name__ == "__main__":
-    if len(sys.argv) != 5:
-        sys.exit('Usage: python setup_problem.py -nx # -nr #')
-    
-    for i in range(1, len(sys.argv)/2+1):
-        key = 2*i-1
-        val = 2*i
-        if sys.argv[key] == '-nx':
-            nx = int(sys.argv[val])
-        elif sys.argv[key] == '-nr':
-            nr = int(sys.argv[val])
-        else:
-            sys.exit('Usage: python setup_problem.py -nx # -nr #')
-    
-    neqn,x,type_x,r,type_r,phi,node_idx,node_global = setup_problem(nx,nr)
-    print 'x'
-    print x
-    print 'type_x'
-    print type_x
-    print 'r'
-    print r
-    print 'type_r'
-    print type_r
-    print 'node_idx'
-    print node_idx
-    print 'node_global'
-    print node_global
+    return z,r,phi
