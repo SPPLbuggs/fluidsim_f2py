@@ -12,8 +12,8 @@ def setup_problem(nz,nr,v_l,wvfm,rank,size):
     
     # RF Params:
     v_r  = 0
+    ampl = v_l
     if (wvfm == 2):
-        ampl = v_l
         v_l  = 1e-3
     freq = 1e6
     
@@ -109,6 +109,7 @@ def setup_problem(nz,nr,v_l,wvfm,rank,size):
      
     ne = np.ones([nz,len(r)])*init/n_0
     ni = ne
+    nm = ne
     nt = ne*Te_init
     
     main.mod.neqn      = neqn
@@ -128,6 +129,7 @@ def setup_problem(nz,nr,v_l,wvfm,rank,size):
     main.mod.phi       = phi
     main.mod.ne_pl     = ne
     main.mod.ni_pl     = ni
+    main.mod.nm_pl     = nm
     main.mod.nt_pl     = nt
     
     return z,r

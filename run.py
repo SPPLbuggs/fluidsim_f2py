@@ -66,9 +66,13 @@ main.mod.initialize(rtol,atol)
 #main.mod.view()
 
 nsave = 1000
-t = np.logspace(-3,np.log10(runtime),nsave)
-main.mod.ne_save = np.zeros([len(z),len(r_loc),nsave],order='F')
+#t = np.logspace(-3,np.log10(runtime),nsave)
+t = np.linspace(1,runtime,nsave)
 main.mod.phi_save = np.zeros([len(z),len(r_loc),nsave],order='F')
+main.mod.ni_save = np.zeros([len(z),len(r_loc),nsave],order='F')
+main.mod.ne_save = np.zeros([len(z),len(r_loc),nsave],order='F')
+main.mod.nt_save = np.zeros([len(z),len(r_loc),nsave],order='F')
+main.mod.nm_save = np.zeros([len(z),len(r_loc),nsave],order='F')
 
 main.mod.run(runtime,t)
 
@@ -94,16 +98,37 @@ phi = np.zeros([nr,nz],dtype='d')
 comm.Allgather([phi_loc[:,Istart:Iend],MPI.DOUBLE], [phi, MPI.DOUBLE])
 phi = phi.T
 
+ni_loc = main.mod.ni_pl
+ni = np.zeros([nr,nz],dtype='d')
+comm.Allgather([ni_loc[:,Istart:Iend],MPI.DOUBLE], [ni, MPI.DOUBLE])
+ni = ni.T
+
 ne_loc = main.mod.ne_pl
 ne = np.zeros([nr,nz],dtype='d')
 comm.Allgather([ne_loc[:,Istart:Iend],MPI.DOUBLE], [ne, MPI.DOUBLE])
 ne = ne.T
 
-ne_zt = main.mod.ne_save[:,0,:]
-phi_zt = main.mod.phi_save[:,0,:]
+nt_loc = main.mod.nt_pl
+nt = np.zeros([nr,nz],dtype='d')
+comm.Allgather([nt_loc[:,Istart:Iend],MPI.DOUBLE], [nt, MPI.DOUBLE])
+nt = nt.T
 
-ne_rt = main.mod.ne_save[0,:,:]
+nm_loc = main.mod.nm_pl
+nm = np.zeros([nr,nz],dtype='d')
+comm.Allgather([nm_loc[:,Istart:Iend],MPI.DOUBLE], [nm, MPI.DOUBLE])
+nm = nm.T
+
+phi_zt = main.mod.phi_save[:,0,:]
+ni_zt = main.mod.ni_save[:,0,:]
+ne_zt = main.mod.ne_save[:,0,:]
+nt_zt = main.mod.nt_save[:,0,:]
+nm_zt = main.mod.nm_save[:,0,:]
+
 phi_rt = main.mod.phi_save[0,:,:]
+ni_rt = main.mod.ni_save[0,:,:]
+ne_rt = main.mod.ne_save[0,:,:]
+nt_rt = main.mod.nt_save[0,:,:]
+nm_rt = main.mod.nm_save[0,:,:]
 
 if rank == 0:
     from plotter import *
@@ -112,14 +137,23 @@ if rank == 0:
     if nr > 1 and nz > 1:
         plot_phi(z,r,t,phi,phi_zt)
         plot_n(z,r,t,ne,ne_zt,'Electron')
+        plot_n(z,r,t,ni,ni_zt,'Ion')
+        plot_n(z,r,t,nm,nm_zt,'Metastable')
+        plot_t(z,r,t,nt/ne,nt_zt/ne_zt)
         plt.show()
     
     elif nz > 1:
         plot_1dphi(z,t,phi_zt.T,'z')
         plot_1dn(z,t,ne_zt.T,'z','Electron')
+        plot_1dn(z,t,ni_zt.T,'z','Ion')
+        plot_1dn(z,t,nm_zt.T,'z','Metastable')
+        plot_1dt(z,t,nt_zt.T/ne_zt.T,'z')
         plt.show()
         
-    elif nz > 1:
-        plot_1dphi(z,t,phi_rt.T,'r')
-        plot_1dn(z,t,ne_rt.T,'r','Electron')
+    elif nr > 1:
+        plot_1dphi(r,t,phi_rt.T,'r')
+        plot_1dn(r,t,ne_rt.T,'r','Electron')
+        plot_1dn(r,t,ni_rt.T,'r','Ion')
+        plot_1dn(r,t,nm_rt.T,'r','Metastable')
+        plot_1dt(r,t,nt_rt.T/ne_zt.T,'r')
         plt.show()

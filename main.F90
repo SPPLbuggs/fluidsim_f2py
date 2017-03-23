@@ -7,10 +7,11 @@
     
     !f2py integer:: neqn, nr, nz, nr_loc, wvfm
     !f2py real(8):: phiL, phiR, freq, ampl
-    !f2py integer, allocatable :: type_z(:,:), type_r(:,:), glob_node(:,:)
-    !f2py real(8), allocatable :: z(:), r(:), phi(:,:)
-    !f2py real(8), allocatable :: ni_pl(:,:), ne_pl(:,:), nt_pl(:,:)
-    !f2py real(8), allocatable :: phi_save(:,:,:), ne_save(:,:,:)
+    !f2py integer, allocatable:: type_z(:,:), type_r(:,:), glob_node(:,:)
+    !f2py real(8), allocatable:: z(:), r(:), phi(:,:)
+    !f2py real(8), allocatable:: ni_pl(:,:), ne_pl(:,:), nt_pl(:,:), nm_pl(:,:)
+    !f2py real(8), allocatable:: phi_save(:,:,:), ne_save(:,:,:), ni_save(:,:,:)
+    !f2py real(8), allocatable:: nt_save(:,:,:), nm_save(:,:,:)
     
     
     contains
@@ -26,7 +27,7 @@
     
     call petsc_initialize
     
-    allocate( ki(5, nz, nr_loc), ke(5, nz, nr_loc), kt(5, nz, nr_loc), &
+    allocate( ki(5, nz, nr_loc), ke(5, nz, nr_loc), kt(5, nz, nr_loc), km(5, nz, nr_loc), &
               nu(nz, nr_loc), mue(nz, nr_loc), mut(nz, nr_loc), &
               De(nz, nr_loc), Dt(nz, nr_loc), k_ir(nz, nr_loc), &
               k_ex(nz, nr_loc), k_sc(nz, nr_loc), k_si(nz, nr_loc) )
@@ -37,6 +38,8 @@
     ne_org = ne_pl
     nt_mi  = nt_pl
     nt_org = nt_pl
+    nm_mi  = nm_pl
+    nm_org = nm_pl
     
     call update_coef
     call update_bc
@@ -168,6 +171,9 @@
                           rank-1, 15, comm, ierr)
             call MPI_Send(nt_pl(:,2), nz, MPI_REAL8, &
                           rank-1, 15, comm, ierr)
+            call MPI_Send(nm_pl(:,2), nz, MPI_REAL8, &
+                          rank-1, 15, comm, ierr)
+                          
         end if
         if (rank .ne. tasks -1) then
             call MPI_Send(ni_pl(:,nr_loc-1), nz, MPI_REAL8, &
@@ -175,6 +181,8 @@
             call MPI_Send(ne_pl(:,nr_loc-1), nz, MPI_REAL8, &
                           rank+1, 16, comm, ierr)
             call MPI_Send(nt_pl(:,nr_loc-1), nz, MPI_REAL8, &
+                          rank+1, 16, comm, ierr)
+            call MPI_Send(nm_pl(:,nr_loc-1), nz, MPI_REAL8, &
                           rank+1, 16, comm, ierr)
         end if
         if (rank .ne. tasks-1) then
@@ -184,6 +192,8 @@
                           rank+1, 15, comm, recv_status, ierr)
             call MPI_Recv(nt_pl(:,nr_loc), nz, MPI_REAL8, &
                           rank+1, 15, comm, recv_status, ierr)
+            call MPI_Recv(nm_pl(:,nr_loc), nz, MPI_REAL8, &
+                          rank+1, 15, comm, recv_status, ierr)
         end if
         if (rank .ne. 0) then
             call MPI_Recv(ni_pl(:,1), nz, MPI_REAL8, &
@@ -191,6 +201,8 @@
             call MPI_Recv(ne_pl(:,1), nz, MPI_REAL8, &
                           rank-1, 16, comm, recv_status, ierr)
             call MPI_Recv(nt_pl(:,1), nz, MPI_REAL8, &
+                          rank-1, 16, comm, recv_status, ierr)
+            call MPI_Recv(nm_pl(:,1), nz, MPI_REAL8, &
                           rank-1, 16, comm, recv_status, ierr)
         end if
         
@@ -208,10 +220,15 @@
         ne_org = ne_pl
         nt_mi  = nt_pl
         nt_org = nt_pl
+        nm_mi  = nm_pl
+        nm_org = nm_pl
         
         if (time >= savetime(ksave)) then
             phi_save(:,:,ksave) = phi
+            ni_save(:,:,ksave) = ni_pl
             ne_save(:,:,ksave) = ne_pl
+            nt_save(:,:,ksave) = nt_pl
+            nm_save(:,:,ksave) = nm_pl
             ksave = ksave+1
         end if
         
