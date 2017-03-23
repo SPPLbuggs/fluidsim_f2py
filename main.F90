@@ -5,8 +5,8 @@
     use explicit_lib
     implicit none
     
-    !f2py integer:: neqn, nr, nz, nr_loc
-    !f2py real(8):: phiL, phiR
+    !f2py integer:: neqn, nr, nz, nr_loc, wvfm
+    !f2py real(8):: phiL, phiR, freq, ampl
     !f2py integer, allocatable :: type_z(:,:), type_r(:,:), glob_node(:,:)
     !f2py real(8), allocatable :: z(:), r(:), phi(:,:)
     !f2py real(8), allocatable :: ni_pl(:,:), ne_pl(:,:), nt_pl(:,:)
@@ -39,8 +39,7 @@
     nt_org = nt_pl
     
     call update_coef
-    ! update boundary conditions
-    !call update_bc
+    call update_bc
 
     ! assemble A and b
     do j = Jstart, Jend
@@ -94,9 +93,11 @@
     integer, intent(in) :: nsave
     real(dp), intent(in):: fintime, savetime(nsave)
     integer  :: i, j, node, stage, recv_status, Nprint = 1000, ksave = 1
-    real(dp) :: time = 0, stime, itime, etime, ftime, b_temp, &
+    real(dp) :: stime, itime, etime, ftime, b_temp, &
                 err_prev = 1, soln = 0,  &
                 avg_itime = 0, avg_etime = 0, avg_stime = 0
+    
+    time = 0
     
     do
         call cpu_time(stime)
@@ -199,6 +200,8 @@
         
         time = time + deltime
         
+        call update_bc
+        
         ni_mi  = ni_pl
         ni_org = ni_pl
         ne_mi  = ne_pl
@@ -227,10 +230,14 @@
             write(6,90) timestep/Nprint, int(log10(real(Nprint))), deltime, time, fintime
             call KSPGetIterationNumber(ksp,its,ierr)
             write(6,91) avg_stime, avg_itime, avg_etime, its
+            if (wvfm .ne. 0) then
+                write(6,92) phiL*1e3
+            end if
             write(*,*)
         end if
 90 format('Step # ', i4,'e',i1 '  dT:', es9.2, '  Time:', es9.2, '  Final Time:', f4.1)
 91 format('  time/s: ', f5.3, '  iTime: ', f5.3, ' eTime: ', f5.3, '  ksp:', i4)
+92 format('  applied voltage: ', f8.2, 'V')
 
         if (time >= fintime) exit
         

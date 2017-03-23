@@ -19,8 +19,8 @@
     PetscErrorCode ierr
     PetscScalar none
     
-    integer  :: neqn, nz, nr, nr_loc, Jstart, Jend,timestep = 0
-    real(8) :: phiL, phiR, deltime = 1e-6
+    integer  :: neqn, nz, nr, nr_loc, Jstart, Jend, timestep = 0, wvfm
+    real(dp) :: phiL, phiR, deltime = 1e-6, freq, ampl, time
     integer, allocatable :: type_z(:,:), type_r(:,:), glob_node(:,:)
     real(dp), allocatable :: z(:), r(:), phi(:,:), ki(:,:,:), ke(:,:,:), kt(:,:,:), &
                              ni_mi(:,:), ni_pl(:,:), ni_org(:,:), &
@@ -79,7 +79,7 @@
     contains
     
     subroutine update_coef
-    integer:: node, i, j
+    integer:: i, j
     real(dp) :: Te
     do j = 1, nr_loc
         do i = 1, nz
@@ -98,7 +98,56 @@
         end do
     end do
     end subroutine
-       
+    
+    subroutine update_bc
+    integer:: i,j
+    
+    ! AC boundaries
+    if (wvfm == 1) then
+        do j = 1, nr_loc
+            do i = 1, nz
+                if ((type_z(i,j) == -2) .or. (type_r(i,j) == -2)) then
+                    phiL = ampl * cos(2.0_dp * pi * freq * time)
+                    phi(i,j) = phiL
+                end if
+            end do
+        end do
+    ! Pulse boundaries
+    else if (wvfm == 2) then
+        do j = 1, nr_loc
+            do i = 1, nz
+                if ((type_z(i,j) == -2) .or. (type_r(i,j) == -2)) then
+                    phiL = ampl * normal( (time - 100e-3_dp) / 100e-3_dp) &
+                            * cdf( 4.0_dp * (time - 100e-3_dp) / 100e-3_dp ) &
+                            * 2.8712654770371477_dp
+                            
+                    phi(i,j) = phiL
+                end if
+            end do
+        end do
+    end if
+    
+    
+    end subroutine
+    
+    function normal(x)
+    real(dp) :: normal
+    real(dp), intent(in) :: x
+    
+    normal = 1.0_dp / sqrt(2.0_dp * pi) * exp(-x**2 / 2.0_dp)
+    
+    return
+    end function
+    
+    function cdf(x)
+    real(dp) :: cdf
+    real(dp), intent(in) :: x
+    
+    cdf = 0.5_dp * (1 + erf( x / sqrt(2.0_dp) ))
+    
+    return
+    end function
+           
     function get_Te(nt,ne)
     real(dp):: get_Te
     real(dp), intent(in) :: nt, ne

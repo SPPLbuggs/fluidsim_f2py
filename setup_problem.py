@@ -2,7 +2,7 @@ import numpy as np
 import main
 import sys
 
-def setup_problem(nz,nr,v_l,rank,size):
+def setup_problem(nz,nr,v_l,wvfm,rank,size):
     
     # Physical Params:
     length   = 5e-3
@@ -11,8 +11,9 @@ def setup_problem(nz,nr,v_l,rank,size):
     e_stop   = 5e-4
     
     # RF Params:
-    v_r = 0
-    rf_fq   = 1e6
+    v_r  = 0
+    ampl = v_l
+    freq = 1e6
     
     # Simulation Params:
     init = 1e14
@@ -48,7 +49,7 @@ def setup_problem(nz,nr,v_l,rank,size):
     
     # linear spacing
     #z = np.linspace(0,length,nz)/len_0
-    #r = np.linspace(0,radius,nr)/len_0
+    r = np.linspace(0,radius,nr)/len_0
 
     phi = np.zeros([nz,nr],order='F')/phi_0
 
@@ -112,9 +113,11 @@ def setup_problem(nz,nr,v_l,rank,size):
     main.mod.nz        = nz
     main.mod.nr        = nr
     main.mod.nr_loc    = len(r)
-    main.mod.phir      = v_r
-    main.mod.phil      = v_l
-    
+    main.mod.phir      = v_r/phi_0
+    main.mod.phil      = v_l/phi_0
+    main.mod.ampl      = ampl/phi_0
+    main.mod.freq      = freq*tau_0
+    main.mod.wvfm      = wvfm
     main.mod.type_z    = type_z
     main.mod.type_r    = type_r
     main.mod.glob_node = node_global

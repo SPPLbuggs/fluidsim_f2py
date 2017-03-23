@@ -18,6 +18,7 @@ rtol    = 1e-6
 atol    = 1e-10
 runtime = 10
 vl      = -200
+simtype = 'dc'
 
 for i in range(1, len(sys.argv)/2+1):
         key = 2*i-1
@@ -32,8 +33,19 @@ for i in range(1, len(sys.argv)/2+1):
             atol = float(sys.argv[val])
         elif sys.argv[key] == '-rtime':
             runtime = float(sys.argv[val])
-        elif sys.argv[key] == '-vl':
-            vl = float(sys.argv[val])
+        elif sys.argv[key] == '-type':
+            simtype = sys.argv[val]
+
+if simtype.lower() == 'dc':
+    wvfm = 0
+elif simtype.lower() == 'ac':
+    wvfm = 1
+elif simtype.lower() == 'pulse':
+    wvfm = 2
+else:
+    if rank == 0:
+        print 'Error: unknown simulation type. Options are dc, ac, and pulse.'
+    sys.exit()
 
 if rank == 0:
     print('Mesh size is {} by {} = {} nodes'.format(nz,nr, nz*nr))
@@ -46,12 +58,12 @@ if nr%size != 0:
 
 
 # setup problem
-z,r_loc = setup_problem(nz,nr,vl,rank,size)
+z,r_loc = setup_problem(nz,nr,vl,wvfm,rank,size)
 
 main.mod.initialize(rtol,atol)
 #main.mod.view()
 
-nsave     = 100
+nsave = 1000
 t = np.logspace(-3,np.log10(runtime),nsave)
 main.mod.ne_save = np.zeros([len(z),len(r_loc),nsave],order='F')
 main.mod.phi_save = np.zeros([len(z),len(r_loc),nsave],order='F')
