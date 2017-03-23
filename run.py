@@ -35,6 +35,8 @@ for i in range(1, len(sys.argv)/2+1):
             runtime = float(sys.argv[val])
         elif sys.argv[key] == '-type':
             simtype = sys.argv[val]
+        elif sys.argv[key] == '-vl':
+            vl = float(sys.argv[val])
 
 if simtype.lower() == 'dc':
     wvfm = 0

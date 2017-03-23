@@ -40,7 +40,7 @@
     
     call update_coef
     call update_bc
-
+    
     ! assemble A and b
     do j = Jstart, Jend
         do i = 1, nz
@@ -201,7 +201,7 @@
         time = time + deltime
         
         call update_bc
-        
+
         ni_mi  = ni_pl
         ni_org = ni_pl
         ne_mi  = ne_pl

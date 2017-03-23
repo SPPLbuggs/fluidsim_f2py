@@ -12,7 +12,9 @@ def setup_problem(nz,nr,v_l,wvfm,rank,size):
     
     # RF Params:
     v_r  = 0
-    ampl = v_l
+    if (wvfm == 2):
+        ampl = v_l
+        v_l  = 1e-3
     freq = 1e6
     
     # Simulation Params:
